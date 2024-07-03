@@ -81,3 +81,35 @@ These projects demonstrate my commitment to:
 Improving efficiency
 Reducing manual effort
 Ensuring smooth deployment processes
+
+
+
+
+
+EC2 Instances
+
+aws ec2 describe-instances --region us-east-1 --query "Reservations[*].Instances[*].[InstanceId]" --output text --no-paginate | wc -l
+
+RDS Instances
+
+aws rds describe-db-instances --region us-east-1 --query "DBInstances[*].DBInstanceIdentifier" --output text --no-paginate | wc -l
+
+EKS Clusters
+
+aws eks list-clusters --region us-east-1 --query "clusters" --output text --no-paginate | wc -l
+
+ElastiCache Clusters
+
+aws elasticache describe-cache-clusters --region us-east-1 --query "CacheClusters[*].CacheClusterId" --output text --no-paginate | wc -l
+
+S3 Buckets
+
+Note: S3 buckets are global resources and are not limited to a specific region. However, you can count the total number of buckets in your account:
+
+aws s3api list-buckets --query "Buckets[*].Name" --output text | wc -l
+
+OpenSearch Domains
+
+aws opensearch list-domain-names --region us-east-1 --query "DomainNames[*].DomainName" --output text --no-paginate | wc -l
+
+These commands will provide you with the count of each resource type in the specified region.
