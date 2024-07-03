@@ -20,3 +20,15 @@ Elasticache and OpenSearch:
 Objective: Centralize the creation of Redis and OpenSearch clusters.
 Achievements: I developed a centralized approach for creating clusters using CloudFormation Templates (CFTs) generated dynamically based on minimal user inputs (e.g., VSAD, environment, region, size). This backend generation uses Groovy scripting. Currently, we have enabled the creation of clusters, and we plan to integrate update, upgrade, and delete operations into the SRE portal.
 These projects exemplify my dedication to enhancing efficiency, reducing manual efforts, and ensuring seamless deployment processes within the infrastructure domain.
+
+
+
+Grafana:
+
+Objective: Automate and maintain the non-production Grafana setup.
+Achievements: I have automated the complete non-production Grafana setup and regularly maintain it. This includes handling rehydrations and operations such as creating organizations and users. I manage the non-production Grafana infrastructure independently, addressing any issues that arise.
+AVI-to-ALB Migration:
+
+Objective: Assist teams in migrating load balancers from AVI to ALB.
+Achievements: I provide continuous support to teams migrating their load balancers from AVI to ALB. Additionally, I offer ongoing support for all IAC projects as needed.
+These projects exemplify my dedication to enhancing efficiency, reducing manual efforts, and ensuring seamless deployment processes within the infrastructure domain.
