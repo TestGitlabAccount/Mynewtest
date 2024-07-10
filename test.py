@@ -198,3 +198,34 @@ def get_elasticache_cluster_count():
     except Exception as e:
         return {"error": str(e)}
 
+
+
+import boto3
+from fastapi import HTTPException
+from botocore.exceptions import NoCredentialsError, PartialCredentialsError, EndpointConnectionError
+from .circuit_breaker import breaker
+
+@breaker
+def get_s3_bucket_count_by_region(region: str):
+    session = boto3.Session()
+    s3_client = session.client('s3', region_name=region)
+    try:
+        response = s3_client.list_buckets()
+        buckets = response['Buckets']
+        count = 0
+        for bucket in buckets:
+            bucket_location = s3_client.get_bucket_location(Bucket=bucket['Name'])['LocationConstraint']
+            if bucket_location == region:
+                count += 1
+        return {"s3_bucket_count": count}
+    except NoCredentialsError:
+        raise HTTPException(status_code=400, detail="AWS credentials not found")
+    except PartialCredentialsError:
+        raise HTTPException(status_code=400, detail="Incomplete AWS credentials")
+    except EndpointConnectionError as e:
+        raise HTTPException(status_code=503, detail=f"Endpoint connection error: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        s3_client.close()
+
