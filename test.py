@@ -229,3 +229,25 @@ def get_s3_bucket_count_by_region(region: str):
     finally:
         s3_client.close()
 
+import boto3
+from collections import defaultdict
+
+def get_eks_clusters_count_by_vsad():
+    eks_client = boto3.client('eks')
+    paginator = eks_client.get_paginator('list_clusters')
+    cluster_iterator = paginator.paginate()
+    
+    vsad_counts = defaultdict(int)
+    
+    for cluster_page in cluster_iterator:
+        cluster_names = cluster_page['clusters']
+        
+        for cluster_name in cluster_names:
+            cluster_info = eks_client.describe_cluster(name=cluster_name)
+            tags = cluster_info['cluster']['tags']
+            
+            vsad = tags.get('vsad')
+            if vsad:
+                vsad_counts[vsad] += 1
+    
+    return vsad_counts
