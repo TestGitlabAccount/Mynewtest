@@ -82,3 +82,49 @@ async def get_ec2_instance_count():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+
+import boto3
+from collections import defaultdict
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
+def get_elasticache_clusters_count_by_vsad():
+    elasticache_client = boto3.client('elasticache')
+    vsad_counts = defaultdict(int)
+    next_token = None
+
+    while True:
+        if next_token:
+            response = elasticache_client.describe_cache_clusters(Marker=next_token)
+        else:
+            response = elasticache_client.describe_cache_clusters()
+        
+        clusters = response.get('CacheClusters', [])
+        next_token = response.get('Marker')
+
+        logger.debug(f"Processing clusters: {clusters}")
+
+        for cluster in clusters:
+            cache_cluster_id = cluster['CacheClusterId']
+            tags_response = elasticache_client.list_tags_for_resource(
+                ResourceName=f'arn:aws:elasticache:{cluster["CacheClusterId"]}'
+            )
+            tags = tags_response.get('TagList', [])
+            tag_dict = {tag['Key']: tag['Value'] for tag in tags}
+            logger.debug(f"Cluster: {cache_cluster_id}, Tags: {tag_dict}")
+            
+            vsad = tag_dict.get('vsad')
+            if vsad:
+                vsad_counts[vsad] += 1
+        
+        if not next_token:
+            break
+
+    logger.debug(f"VSAD counts: {vsad_counts}")
+    print(vsad_counts)  # Print the vsad_counts dictionary
+    return vsad_counts
