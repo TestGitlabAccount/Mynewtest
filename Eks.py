@@ -36,3 +36,49 @@ def get_eks_clusters_count_by_vsad():
 
     logger.debug(f"VSAD counts: {vsad_counts}")
     return vsad_counts
+
+
+
+
+
+from fastapi import FastAPI
+import boto3
+from botocore.exceptions import NoCredentialsError, PartialCredentialsError
+import os
+
+app = FastAPI()
+
+# Configure AWS credentials (can also be done via environment variables or AWS config file)
+AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
+AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
+AWS_REGION = os.getenv('AWS_REGION', 'us-west-2')  # Set your default region
+
+# Create a boto3 EC2 client
+ec2_client = boto3.client(
+    'ec2',
+    aws_access_key_id=AWS_ACCESS_KEY_ID,
+    aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+    region_name=AWS_REGION
+)
+
+@app.get("/ec2-instance-count")
+async def get_ec2_instance_count():
+    try:
+        # Describe EC2 instances
+        response = ec2_client.describe_instances()
+        instances = response['Reservations']
+        
+        # Count the instances
+        instance_count = sum(len(reservation['Instances']) for reservation in instances)
+        return {"instance_count": instance_count}
+
+    except NoCredentialsError:
+        return {"error": "AWS credentials not found"}
+    except PartialCredentialsError:
+        return {"error": "Incomplete AWS credentials"}
+    except Exception as e:
+        return {"error": str(e)}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
