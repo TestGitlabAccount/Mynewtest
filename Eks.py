@@ -128,3 +128,21 @@ def get_elasticache_clusters_count_by_vsad():
     logger.debug(f"VSAD counts: {vsad_counts}")
     print(vsad_counts)  # Print the vsad_counts dictionary
     return vsad_counts
+
+
+
+
+from fastapi import FastAPI
+from aws.aws_methods import get_ebs_volumes_count, get_snapshots_count
+
+app = FastAPI()
+
+@app.get("/ebs_volumes_count")
+def ebs_volumes_count():
+    count = get_ebs_volumes_count()
+    return {"EBS Volumes Count": count}
+
+@app.get("/snapshots_count")
+def snapshots_count():
+    count = get_snapshots_count()
+    return {"Snapshots Count": count}
