@@ -146,3 +146,17 @@ def ebs_volumes_count():
 def snapshots_count():
     count = get_snapshots_count()
     return {"Snapshots Count": count}
+
+
+import boto3
+
+def get_ebs_volumes_count():
+    ec2 = boto3.client('ec2')
+    response = ec2.describe_volumes()
+    return len(response['Volumes'])
+
+def get_snapshots_count():
+    ec2 = boto3.client('ec2')
+    response = ec2.describe_snapshots(OwnerIds=['self'])  # 'self' refers to your account
+    return len(response['Snapshots'])
+
