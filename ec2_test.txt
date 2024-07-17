@@ -1,0 +1,85 @@
+import boto3
+from datetime import datetime, timedelta, timezone
+
+def get_ec2_instances():
+    ec2_client = boto3.client('ec2')
+    instances = []
+    next_token = None
+
+    while True:
+        if next_token:
+            response = ec2_client.describe_instances(NextToken=next_token)
+        else:
+            response = ec2_client.describe_instances()
+
+        for reservation in response['Reservations']:
+            for instance in reservation['Instances']:
+                instances.append(instance)
+
+        next_token = response.get('NextToken')
+        if not next_token:
+            break
+
+    return instances
+
+def filter_new_instances(yesterday_instances, today_instances):
+    yesterday_ids = set(instance['InstanceId'] for instance in yesterday_instances)
+    new_instances = [instance for instance in today_instances if instance['InstanceId'] not in yesterday_ids]
+    return new_instances
+
+def get_vsad_tag(tags):
+    for tag in tags:
+        if tag['Key'] == 'vsad':
+            return tag['Value']
+    return None
+
+def group_by_vsad(instances):
+    vsad_group = {}
+    for instance in instances:
+        vsad = get_vsad_tag(instance.get('Tags', []))
+        if vsad:
+            if vsad not in vsad_group:
+                vsad_group[vsad] = {
+                    'count': 0,
+                    'instances': []
+                }
+            vsad_group[vsad]['count'] += 1
+            vsad_group[vsad]['instances'].append({
+                'InstanceId': instance['InstanceId'],
+                'InstanceType': instance['InstanceType']
+            })
+    return vsad_group
+
+
+
+from fastapi import FastAPI, HTTPException
+from datetime import datetime, timedelta, timezone
+from aws.ec2Methods import get_ec2_instances, filter_new_instances, group_by_vsad
+
+app = FastAPI()
+
+@app.get("/ec2/new-instances")
+async def get_new_instances_by_vsad():
+    try:
+        now = datetime.now(timezone.utc)
+        today_start = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+        yesterday_start = today_start - timedelta(days=1)
+
+        instances = get_ec2_instances()
+        
+        yesterday_instances = [instance for instance in instances if yesterday_start <= instance['LaunchTime'] < today_start]
+        today_instances = [instance for instance in instances if today_start <= instance['LaunchTime'] < (today_start + timedelta(days=1))]
+
+        new_instances = filter_new_instances(yesterday_instances, today_instances)
+        vsad_group = group_by_vsad(new_instances)
+        
+        return {
+            "totalnewinstances": len(new_instances),
+            "vsadlevel": vsad_group
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
