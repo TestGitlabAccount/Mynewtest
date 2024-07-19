@@ -209,3 +209,47 @@ if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
+
+
+import boto3
+
+def get_opensearch_domains():
+    es_client = boto3.client('opensearch')
+    domains = []
+    paginator = es_client.get_paginator('list_domain_names')
+
+    for page in paginator.paginate():
+        domains.extend(page['DomainNames'])
+
+    # Add tags to each domain
+    for domain in domains:
+        domain_name = domain['DomainName']
+        domain_arn = es_client.describe_domain(DomainName=domain_name)['DomainStatus']['ARN']
+        tags_response = es_client.list_tags(ARN=domain_arn)
+        domain['Tags'] = {tag['Key']: tag['Value'] for tag in tags_response['TagList']}
+
+    return domains
+
+def group_opensearch_domains_by_vsad():
+    domains = get_opensearch_domains()
+    vsad_counts = {}
+    for domain in domains:
+        tags = domain.get('Tags', {})
+        vsad = tags.get('Vsad', None)
+        if vsad:
+            if vsad not in vsad_counts:
+                vsad_counts[vsad] = {
+                    "count": 0,
+                    "instance_details": []
+                }
+            vsad_counts[vsad]["count"] += 1
+            vsad_counts[vsad]["instance_details"].append({
+                "ID": domain['DomainName'],
+                "instanceType": "opensearch",
+                "Vsad": vsad
+            })
+
+    return {
+        "totalnewinstances": len(domains),
+        "vsadlevel": vsad_counts
+    }
