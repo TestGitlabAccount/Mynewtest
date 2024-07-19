@@ -253,3 +253,61 @@ def group_opensearch_domains_by_vsad():
         "totalnewinstances": len(domains),
         "vsadlevel": vsad_counts
     }
+
+
+
+import boto3
+from fastapi import HTTPException
+
+def get_elasticache_clusters():
+    es_client = boto3.client('elasticache')
+    clusters = []
+    paginator = es_client.get_paginator('describe_cache_clusters')
+    for page in paginator.paginate():
+        clusters.extend(page['CacheClusters'])
+    
+    detailed_clusters = []
+    
+    for cluster in clusters:
+        cluster_arn = cluster['ARN']
+        
+        # Get tags for the cluster
+        tags_response = es_client.list_tags_for_resource(ResourceName=cluster_arn)
+        tags = {tag['Key']: tag['Value'] for tag in tags_response['TagList']}
+        
+        # Append detailed cluster info
+        detailed_clusters.append({
+            'CacheClusterId': cluster['CacheClusterId'],
+            'Tags': tags
+        })
+    
+    return detailed_clusters
+
+def group_elasticache_clusters_by_vsad():
+    try:
+        clusters = get_elasticache_clusters()
+        vsad_counts = {}
+
+        for cluster in clusters:
+            tags = cluster.get('Tags', {})
+            vsad = tags.get('Vsad', None)
+            if vsad:
+                if vsad not in vsad_counts:
+                    vsad_counts[vsad] = {
+                        "count": 0,
+                        "instance_details": []
+                    }
+                vsad_counts[vsad]["count"] += 1
+                vsad_counts[vsad]["instance_details"].append({
+                    "ID": cluster['CacheClusterId'],
+                    "instanceType": "elasticache",
+                    "Vsad": vsad
+                })
+
+        return {
+            "totalnewinstances": len(clusters),
+            "vsadlevel": vsad_counts
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
