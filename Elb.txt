@@ -1,0 +1,35 @@
+
+#!/bin/bash
+
+# List all target groups
+target_groups=$(aws elbv2 describe-target-groups --query 'TargetGroups[*].TargetGroupArn' --output text)
+
+# Initialize an array to hold unattached target groups
+unattached_target_groups=()
+
+# Loop through each target group
+for tg_arn in $target_groups; do
+  # Check if the target group has any targets registered
+  targets=$(aws elbv2 describe-target-health --target-group-arn $tg_arn --query 'TargetHealthDescriptions[*].Target.Id' --output text)
+
+  # If no targets are registered, add to unattached_target_groups array
+  if [ -z "$targets" ]; then
+    unattached_target_groups+=($tg_arn)
+  fi
+done
+
+# Output unattached target groups
+echo "Unattached Target Groups:"
+for tg_arn in "${unattached_target_groups[@]}"; do
+  echo $tg_arn
+done
+
+# Find the tags for each unattached target group
+echo "Target Groups and their User IDs from Tags:"
+for tg_arn in "${unattached_target_groups[@]}"; do
+  # Get tags for the target group
+  tags=$(aws elbv2 describe-tags --resource-arns $tg_arn --query 'TagDescriptions[*].Tags[?Key==`UserID`].Value' --output text)
+
+  # Output the target group ARN and the associated user ID from tags
+  echo "Target Group ARN: $tg_arn, User ID: $tags"
+done
