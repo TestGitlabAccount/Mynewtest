@@ -148,14 +148,68 @@ def snapshots_count():
     return {"Snapshots Count": count}
 
 
+
+
+
 import boto3
+from datetime import datetime
 
-def get_ebs_volumes_count():
-    ec2 = boto3.client('ec2')
-    response = ec2.describe_volumes()
-    return len(response['Volumes'])
+def get_msk_details(region: str, environment: str):
+    # Initialize Boto3 client for MSK
+    client = boto3.client('kafka', region_name=region)
 
-def get_snapshots_count():
+    # Retrieve the list of clusters
+    clusters = client.list_clusters()
+
+    # Prepare a dictionary to store VSAD information
+    vsad_data = {}
+
+    # Iterate over each cluster and describe them
+    for cluster_arn in clusters['ClusterInfoList']:
+        cluster_info = client.describe_cluster(ClusterArn=cluster_arn['ClusterArn'])
+        
+        # Extract the tags for each cluster
+        tags = client.list_tags_for_resource(ResourceArn=cluster_arn['ClusterArn'])
+        
+        vsad = None
+        owner = None
+        creationdate = None
+        resource_id = cluster_info['ClusterInfo']['ClusterArn']
+        
+        # Process tags
+        for key, value in tags['Tags'].items():
+            if key.lower() == 'vsad':
+                vsad = value
+            elif key.lower() == 'owner':
+                owner = value
+            elif key.lower() == 'creationdate':
+                creationdate = value
+
+        # Only proceed if VSAD is present
+        if vsad:
+            # Initialize VSAD entry if not present
+            if vsad not in vsad_data:
+                vsad_data[vsad] = {
+                    'vsad': vsad,
+                    'Count': 0,
+                    'instances': []
+                }
+
+            # Increment the count for this VSAD
+            vsad_data[vsad]['Count'] += 1
+
+            # Append the instance details
+            vsad_data[vsad]['instances'].append({
+                'instanceType': cluster_info['ClusterInfo']['ClusterType'],
+                'owner': owner or 'Unknown',
+                'creationdate': creationdate or 'Unknown',
+                'ResourceID': resource_id
+            })
+
+    # Convert the vsad_data dictionary to a list
+    vsad_list = [details for vsad, details in vsad_data.items()]
+    return vsad_list
+
     ec2 = boto3.client('ec2')
     response = ec2.describe_snapshots(OwnerIds=['self'])  # 'self' refers to your account
     return len(response['Snapshots'])
