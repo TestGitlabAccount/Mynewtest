@@ -214,3 +214,123 @@ def get_msk_details(region: str, environment: str):
     response = ec2.describe_snapshots(OwnerIds=['self'])  # 'self' refers to your account
     return len(response['Snapshots'])
 
+
+
+
+from fastapi import FastAPI, HTTPException
+from typing import List, Dict, Any, Optional
+import boto3
+from botocore.exceptions import ClientError
+from pydantic import BaseModel
+from datetime import datetime
+
+app = FastAPI()
+
+# Define a request model for API calls
+class RDSRequest(BaseModel):
+    region: str
+
+# Define a helper function to extract tags from TagList
+def extract_owner(tag_list: List[Dict[str, str]]) -> str:
+    for tag in tag_list:
+        if tag.get('Key') == 'owner':
+            return tag.get('Value', 'Unknown')
+    return 'Unknown'
+
+# Function to fetch RDS Clusters using paginator
+def fetch_rds_clusters(region: str) -> List[Dict[str, Any]]:
+    client = boto3.client('rds', region_name=region)
+
+    clusters = []
+    paginator = client.get_paginator('describe_db_clusters')
+
+    for page in paginator.paginate():
+        for cluster in page['DBClusters']:
+            cluster_info = {
+                "DBClusterIdentifier": cluster.get('DBClusterIdentifier'),
+                "owner": extract_owner(cluster.get('TagList', [])),
+                "creationdate": cluster.get('ClusterCreateTime').strftime('%Y-%m-%d'),
+                "ResourceID": cluster.get('DBClusterArn'),
+                "Status": cluster.get('Status'),
+                "Engine": cluster.get('Engine'),
+                "EngineVersion": cluster.get('EngineVersion'),
+                "StorageEncrypted": cluster.get('StorageEncrypted'),
+                "AvailabilityZones": cluster.get('AvailabilityZones'),
+                "BackupRetentionPeriod": cluster.get('BackupRetentionPeriod'),
+                "Endpoint": cluster.get('Endpoint'),
+                "ReaderEndpoint": cluster.get('ReaderEndpoint'),
+                "DBClusterMembers": [{
+                    "DBInstanceIdentifier": member.get('DBInstanceIdentifier'),
+                    "IsClusterWriter": member.get('IsClusterWriter'),
+                } for member in cluster.get('DBClusterMembers', [])],
+                "VpcSecurityGroups": [{
+                    "VpcSecurityGroupId": sg.get('VpcSecurityGroupId'),
+                    "Status": sg.get('Status'),
+                } for sg in cluster.get('VpcSecurityGroups', [])],
+                "Tags": [{tag['Key']: tag['Value']} for tag in cluster.get('TagList', [])]
+            }
+            clusters.append(cluster_info)
+
+    return clusters
+
+# Function to fetch RDS Instances using paginator
+def fetch_rds_instances(region: str) -> List[Dict[str, Any]]:
+    client = boto3.client('rds', region_name=region)
+
+    instances = []
+    paginator = client.get_paginator('describe_db_instances')
+
+    for page in paginator.paginate():
+        for instance in page['DBInstances']:
+            instance_info = {
+                "DBInstanceIdentifier": instance.get('DBInstanceIdentifier'),
+                "owner": extract_owner(instance.get('TagList', [])),
+                "creationdate": instance.get('InstanceCreateTime').strftime('%Y-%m-%d'),
+                "ResourceID": instance.get('DBInstanceArn'),
+                "Status": instance.get('DBInstanceStatus'),
+                "Engine": instance.get('Engine'),
+                "EngineVersion": instance.get('EngineVersion'),
+                "DBInstanceClass": instance.get('DBInstanceClass'),
+                "MultiAZ": instance.get('MultiAZ'),
+                "StorageType": instance.get('StorageType'),
+                "VpcSecurityGroups": [{
+                    "VpcSecurityGroupId": sg.get('VpcSecurityGroupId'),
+                    "Status": sg.get('Status'),
+                } for sg in instance.get('VpcSecurityGroups', [])],
+                "Tags": [{tag['Key']: tag['Value']} for tag in instance.get('TagList', [])]
+            }
+            instances.append(instance_info)
+
+    return instances
+
+@app.post("/rds/clusters")
+async def get_rds_clusters(request: RDSRequest):
+    try:
+        clusters = fetch_rds_clusters(request.region)
+        if not clusters:
+            return {"message": "No clusters found for the specified region."}
+
+        response = {
+            "clusters": clusters
+        }
+
+        return response
+    except ClientError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/rds/instances")
+async def get_rds_instances(request: RDSRequest):
+    try:
+        instances = fetch_rds_instances(request.region)
+        if not instances:
+            return {"message": "No instances found for the specified region."}
+
+        response = {
+            "instances": instances
+        }
+
+        return response
+    except ClientError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
