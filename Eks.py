@@ -416,8 +416,116 @@ async def get_rds_clusters_and_instances_by_vsad(request: RDSRequest):
     except ClientError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+
+
+
+
+
+
+
+
+
+from fastapi import FastAPI, HTTPException
+from typing import List, Dict, Any
+import boto3
+from botocore.exceptions import ClientError
+from pydantic import BaseModel
+from datetime import datetime
+
+app = FastAPI()
+
+# Define a request model for API calls
+class RDSRequest(BaseModel):
+    region: str
+
+# Helper function to extract tag values
+def extract_tag_value(tag_list: List[Dict[str, str]], key: str) -> str:
+    for tag in tag_list:
+        if tag.get('Key') == key:
+            return tag.get('Value', 'Unknown')
+    return 'Unknown'
+
+# Fetch RDS Clusters grouped by VSAD
+def fetch_rds_clusters_by_vsad(region: str) -> List[Dict[str, Any]]:
+    client = boto3.client('rds', region_name=region)
+    clusters_by_vsad = {}
+
+    # Describe RDS Clusters
+    paginator_clusters = client.get_paginator('describe_db_clusters')
+    for page in paginator_clusters.paginate():
+        for cluster in page['DBClusters']:
+            vsad = extract_tag_value(cluster.get('TagList', []), 'VSAD')
+            owner = extract_tag_value(cluster.get('TagList', []), 'owner')
+            cluster_info = {
+                "instanceType": cluster.get('DBClusterInstanceClass', 'Unknown'),
+                "owner": owner,
+                "creationdate": cluster.get('ClusterCreateTime').strftime('%Y-%m-%d'),
+                "ResourceID": cluster.get('DBClusterArn')
+            }
+            if vsad not in clusters_by_vsad:
+                clusters_by_vsad[vsad] = []
+            clusters_by_vsad[vsad].append(cluster_info)
+
+    # Format the response
+    formatted_clusters = [{"vsad": vsad, "Count": len(clusters), "instances": clusters} for vsad, clusters in clusters_by_vsad.items()]
+    
+    return formatted_clusters
+
+# Fetch RDS Instances grouped by VSAD
+def fetch_rds_instances_by_vsad(region: str) -> List[Dict[str, Any]]:
+    client = boto3.client('rds', region_name=region)
+    instances_by_vsad = {}
+
+    # Describe RDS Instances
+    paginator_instances = client.get_paginator('describe_db_instances')
+    for page in paginator_instances.paginate():
+        for instance in page['DBInstances']:
+            vsad = extract_tag_value(instance.get('TagList', []), 'VSAD')
+            owner = extract_tag_value(instance.get('TagList', []), 'owner')
+            instance_info = {
+                "instanceType": instance.get('DBInstanceClass'),
+                "owner": owner,
+                "creationdate": instance.get('InstanceCreateTime').strftime('%Y-%m-%d'),
+                "ResourceID": instance.get('DBInstanceArn')
+            }
+            if vsad not in instances_by_vsad:
+                instances_by_vsad[vsad] = []
+            instances_by_vsad[vsad].append(instance_info)
+
+    # Format the response
+    formatted_instances = [{"vsad": vsad, "Count": len(instances), "instances": instances} for vsad, instances in instances_by_vsad.items()]
+
+    return formatted_instances
+
+@app.post("/rds/clusters")
+async def get_rds_clusters_by_vsad(request: RDSRequest):
+    try:
+        clusters_by_vsad = fetch_rds_clusters_by_vsad(request.region)
+
+        if not clusters_by_vsad:
+            return {"message": "No clusters found for the specified region."}
+
+        response = {"clusters": clusters_by_vsad}
+        return response
+    except ClientError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/rds/instances")
+async def get_rds_instances_by_vsad(request: RDSRequest):
+    try:
+        instances_by_vsad = fetch_rds_instances_by_vsad(request.region)
+
+        if not instances_by_vsad:
+            return {"message": "No instances found for the specified region."}
+
+        response = {"instances": instances_by_vsad}
+        return response
+    except ClientError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 # Example Run Command
 # uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
 
 
 
