@@ -113,3 +113,185 @@ OpenSearch Domains
 aws opensearch list-domain-names --region us-east-1 --query "DomainNames[*].DomainName" --output text --no-paginate | wc -l
 
 These commands will provide you with the count of each resource type in the specified region.
+
+
+
+
+
+
+
+
+
+
+
+
+
+Deploying GitLab Runners on EKS Using Helm and values.yaml
+Table of Contents
+Introduction
+Prerequisites
+Setting Up EKS Cluster
+Installing Helm
+Configuring values.yaml
+Deploying GitLab Runners
+Monitoring and Logging
+Scaling Runners
+Troubleshooting
+Conclusion
+References
+Introduction
+This document provides a step-by-step guide on deploying GitLab Runners on an Amazon EKS (Elastic Kubernetes Service) cluster using Helm and a custom values.yaml file. By deploying GitLab Runners as Kubernetes pods, you can leverage the scalability and orchestration capabilities of Kubernetes to handle CI/CD workloads efficiently.
+
+Prerequisites
+Before proceeding with the deployment, ensure you have the following prerequisites in place:
+
+AWS Account: Access to an AWS account with permissions to create EKS clusters and other resources.
+AWS CLI: Installed and configured on your local machine.
+kubectl: Installed for managing the Kubernetes cluster.
+Helm: Installed for deploying applications on Kubernetes.
+GitLab Account: Access to your GitLab instance where you will register the runners.
+IAM Role: An IAM role with sufficient permissions to manage the EKS cluster and nodes.
+Setting Up EKS Cluster
+Create an EKS Cluster:
+
+Use the AWS Management Console or AWS CLI to create a new EKS cluster. Here’s an example using the AWS CLI:
+
+bash
+Copy code
+aws eks create-cluster \
+    --name my-gitlab-runner-cluster \
+    --role-arn arn:aws:iam::<account-id>:role/EKS-ClusterRole \
+    --resources-vpc-config subnetIds=subnet-abc123,securityGroupIds=sg-abc123
+Configure kubectl for EKS:
+
+Update your Kubernetes configuration to interact with the EKS cluster:
+
+bash
+Copy code
+aws eks update-kubeconfig --region <region> --name my-gitlab-runner-cluster
+Verify the Cluster:
+
+Ensure your kubectl is configured correctly:
+
+bash
+Copy code
+kubectl get nodes
+Installing Helm
+Add the Helm Repository:
+
+Add the official GitLab Helm repository to your Helm setup:
+
+bash
+Copy code
+helm repo add gitlab https://charts.gitlab.io
+helm repo update
+Verify Helm Installation:
+
+Check if Helm is installed correctly:
+
+bash
+Copy code
+helm version
+Configuring values.yaml
+The values.yaml file is crucial for configuring GitLab Runners. Below is a sample configuration with explanations for each parameter.
+
+yaml
+Copy code
+# values.yaml
+
+gitlabUrl: https://gitlab.com/
+runnerRegistrationToken: "<your-registration-token>"
+runners:
+  config: |
+    [[runners]]
+      name = "my-runner"
+      executor = "kubernetes"
+      [runners.kubernetes]
+        image = "alpine:latest"
+        namespace = "gitlab-runners"
+        poll_timeout = 180
+        [runners.kubernetes.pod_security_context]
+          run_as_user = 1000
+          run_as_group = 3000
+          fs_group = 2000
+  replicas: 2
+  imagePullSecrets:
+    - name: my-registry-secret
+  namespace: gitlab-runners
+Key Parameters
+gitlabUrl: The URL of your GitLab instance.
+runnerRegistrationToken: The token used for registering runners with GitLab. Obtain this from your GitLab project or group settings.
+runners: Configurations specific to the GitLab Runner.
+executor: The executor type; set to kubernetes for this deployment.
+namespace: The Kubernetes namespace where runners will be deployed.
+imagePullSecrets: Secrets for pulling Docker images if needed.
+Deploying GitLab Runners
+Create Namespace:
+
+First, create the namespace for the GitLab Runners:
+
+bash
+Copy code
+kubectl create namespace gitlab-runners
+Deploy with Helm:
+
+Use Helm to deploy the GitLab Runner chart with the customized values.yaml:
+
+bash
+Copy code
+helm upgrade --install gitlab-runner -f values.yaml gitlab/gitlab-runner --namespace gitlab-runners
+Verify Deployment:
+
+Check the status of your GitLab Runners deployment:
+
+bash
+Copy code
+kubectl get pods --namespace gitlab-runners
+Ensure the pods are running without errors.
+
+Monitoring and Logging
+Access Runner Logs:
+
+You can view logs for a specific runner pod using:
+
+bash
+Copy code
+kubectl logs <pod-name> --namespace gitlab-runners
+Prometheus Metrics:
+
+If Prometheus is enabled, access runner metrics at /metrics endpoint of the GitLab Runner pod.
+
+Scaling Runners
+You can scale the number of GitLab Runner pods by updating the replicas field in the values.yaml file.
+
+yaml
+Copy code
+runners:
+  replicas: 5
+Apply the changes using Helm:
+
+bash
+Copy code
+helm upgrade --install gitlab-runner -f values.yaml gitlab/gitlab-runner --namespace gitlab-runners
+Troubleshooting
+Here are some common issues and troubleshooting steps:
+
+Pods Stuck in Pending State:
+
+Check if there are sufficient resources in your EKS cluster.
+Verify that the values.yaml file is correctly configured.
+Image Pull Errors:
+
+Ensure Docker registry secrets are correctly configured.
+Registration Failures:
+
+Double-check the runnerRegistrationToken.
+Ensure network connectivity to the GitLab instance.
+Conclusion
+Deploying GitLab Runners on an EKS cluster provides a robust and scalable CI/CD solution. By following the steps outlined in this document, you can efficiently manage and scale GitLab Runners to meet your organization's needs.
+
+References
+GitLab Runner Documentation
+Helm Documentation
+AWS EKS Documentation
+This documentation should provide a clear and comprehensive guide for deploying GitLab Runners on EKS using Helm. Feel free to customize the document further to suit specific organizational requirements or add any additional information pertinent to your setup.
