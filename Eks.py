@@ -615,3 +615,68 @@ if __name__ == "__main__":
 
 
 
+
+
+import boto3
+
+def get_asgs_with_suspended_launch_process(region_name):
+    """
+    Fetches all Auto Scaling Groups with the 'Launch' process suspended.
+
+    Args:
+        region_name (str): AWS region name.
+
+    Returns:
+        list: List of ASGs where the 'Launch' process is suspended.
+    """
+    # Initialize the Auto Scaling client
+    client = boto3.client('autoscaling', region_name=region_name)
+
+    # Initialize a list to store ASGs with the 'Launch' process suspended
+    suspended_asgs = []
+
+    # Use a paginator to handle large number of ASGs
+    paginator = client.get_paginator('describe_auto_scaling_groups')
+    response_iterator = paginator.paginate()
+
+    # Iterate through each page of results
+    for page in response_iterator:
+        for asg in page['AutoScalingGroups']:
+            # Check if the 'Launch' process is suspended
+            suspended_processes = [p['ProcessName'] for p in asg['SuspendedProcesses']]
+            if 'Launch' in suspended_processes:
+                suspended_asgs.append({
+                    'AutoScalingGroupName': asg['AutoScalingGroupName'],
+                    'SuspendedProcesses': suspended_processes
+                })
+
+    return suspended_asgs
+
+def print_suspended_asgs(asgs):
+    """
+    Prints the ASGs with the 'Launch' process suspended.
+
+    Args:
+        asgs (list): List of ASGs with the 'Launch' process suspended.
+    """
+    if not asgs:
+        print("No Auto Scaling Groups have the 'Launch' process suspended.")
+    else:
+        print("Auto Scaling Groups with 'Launch' process suspended:")
+        for asg in asgs:
+            print(f"Name: {asg['AutoScalingGroupName']}, Suspended Processes: {asg['SuspendedProcesses']}")
+
+if __name__ == "__main__":
+    # Specify the AWS region
+    region_name = 'us-east-1'  # Replace with your AWS region, e.g., 'us-east-1'
+
+    # Get the ASGs with the 'Launch' process suspended
+    suspended_asgs = get_asgs_with_suspended_launch_process(region_name)
+
+    # Print the ASGs with the 'Launch' process suspended
+    print_suspended_asgs(suspended_asgs)
+
+
+
+
+
