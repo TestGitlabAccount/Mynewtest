@@ -1,4 +1,107 @@
 import boto3
+from botocore.exceptions import ClientError
+
+def get_asgs_with_suspended_launch_process(region_name):
+    """
+    Fetches all Auto Scaling Groups with the 'Launch' process suspended and checks AMI availability.
+
+    Args:
+        region_name (str): AWS region name.
+
+    Returns:
+        list: List of ASGs where the 'Launch' process is suspended and their AMIs availability status.
+    """
+    # Initialize the Auto Scaling and EC2 clients
+    asg_client = boto3.client('autoscaling', region_name=region_name)
+    ec2_client = boto3.client('ec2', region_name=region_name)
+
+    # Initialize a list to store ASGs with the 'Launch' process suspended
+    suspended_asgs = []
+
+    # Use a paginator to handle large number of ASGs
+    paginator = asg_client.get_paginator('describe_auto_scaling_groups')
+    response_iterator = paginator.paginate()
+
+    # Iterate through each page of results
+    for page in response_iterator:
+        for asg in page['AutoScalingGroups']:
+            # Check if the 'Launch' process is suspended
+            suspended_processes = [p['ProcessName'] for p in asg['SuspendedProcesses']]
+            if 'Launch' in suspended_processes:
+                # Extract the AMI ID of the ASG instances
+                launch_config_name = asg['LaunchConfigurationName']
+                
+                # Get the launch configuration details
+                try:
+                    launch_config = asg_client.describe_launch_configurations(
+                        LaunchConfigurationNames=[launch_config_name]
+                    )['LaunchConfigurations'][0]
+                    
+                    # Get the AMI ID from the launch configuration
+                    image_id = launch_config['ImageId']
+                    
+                    # Check if the AMI exists
+                    try:
+                        ec2_client.describe_images(ImageIds=[image_id])
+                        ami_status = 'Available'
+                    except ClientError as e:
+                        if 'InvalidAMIID.NotFound' in str(e):
+                            ami_status = 'Not Available'
+                        else:
+                            raise e
+
+                except ClientError as e:
+                    print(f"Error retrieving launch configuration details: {e}")
+                    image_id = 'Unknown'
+                    ami_status = 'Unknown'
+                
+                suspended_asgs.append({
+                    'AutoScalingGroupName': asg['AutoScalingGroupName'],
+                    'SuspendedProcesses': suspended_processes,
+                    'ImageId': image_id,
+                    'AMI Status': ami_status
+                })
+
+    return suspended_asgs
+
+def print_suspended_asgs(asgs):
+    """
+    Prints the ASGs with the 'Launch' process suspended and AMI availability status.
+
+    Args:
+        asgs (list): List of ASGs with the 'Launch' process suspended.
+    """
+    if not asgs:
+        print("No Auto Scaling Groups have the 'Launch' process suspended.")
+    else:
+        for asg in asgs:
+            print(f"{asg['AutoScalingGroupName']}")
+            print(f"{', '.join(asg['SuspendedProcesses'])}")
+            print(f"{asg['ImageId']}")
+            print(f"{asg['AMI Status']}")
+
+if __name__ == "__main__":
+    # Specify the AWS region
+    region_name = 'us-east-1'  # Replace with your AWS region, e.g., 'us-east-1'
+
+    # Get the ASGs with the 'Launch' process suspended and check AMI availability
+    suspended_asgs = get_asgs_with_suspended_launch_process(region_name)
+
+    # Print the ASGs with the 'Launch' process suspended and AMI availability
+    print_suspended_asgs(suspended_asgs)
+
+
+
+
+
+
+
+
+
+
+
+
+import boto3
 from collections import defaultdict
 import logging
 
