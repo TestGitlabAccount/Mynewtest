@@ -528,4 +528,31 @@ async def get_rds_instances_by_vsad(request: RDSRequest):
 
 
 
+Returns:
+    List of Auto Scaling Groups created in June 2024.
+"""
+# Initialize an empty list to store ASGs created in June
+june_asgs = []
+
+# Use a paginator to handle large number of results
+paginator = client.get_paginator('describe_auto_scaling_groups')
+response_iterator = paginator.paginate()
+
+# Iterate through each page of results
+for page in response_iterator:
+    for asg in page['AutoScalingGroups']:
+        # Extract the creation time of the ASG
+        created_time = asg['CreatedTime']
+        
+        # Check if the creation time is in June 2024
+        if created_time.month == 6 and created_time.year == 2024:
+            june_asgs.append({
+                'AutoScalingGroupName': asg['AutoScalingGroupName'],
+                'CreatedTime': created_time
+            })
+
+return june_asgs
+
+
+
 
