@@ -556,3 +556,62 @@ return june_asgs
 
 
 
+
+
+
+
+
+import boto3
+from datetime import datetime
+
+# Initialize the Auto Scaling client
+client = boto3.client('autoscaling', region_name='<your-region>')
+
+def get_asgs_created_in_june():
+    """
+    Fetches all Auto Scaling Groups created in June 2024.
+
+    Returns:
+        List of Auto Scaling Groups created in June 2024.
+    """
+    # Initialize an empty list to store ASGs created in June
+    june_asgs = []
+
+    # Use a paginator to handle large number of results
+    paginator = client.get_paginator('describe_auto_scaling_groups')
+    response_iterator = paginator.paginate()
+
+    # Iterate through each page of results
+    for page in response_iterator:
+        for asg in page['AutoScalingGroups']:
+            # Extract the creation time of the ASG
+            created_time = asg['CreatedTime']
+            
+            # Check if the creation time is in June 2024
+            if created_time.month == 6 and created_time.year == 2024:
+                june_asgs.append({
+                    'AutoScalingGroupName': asg['AutoScalingGroupName'],
+                    'CreatedTime': created_time
+                })
+
+    return june_asgs
+
+def main():
+    # Get ASGs created in June
+    asgs_created_in_june = get_asgs_created_in_june()
+
+    # Check if any ASGs were found and print the results
+    if not asgs_created_in_june:
+        print("No Auto Scaling Groups were created in June 2024.")
+    else:
+        print("Auto Scaling Groups created in June 2024:")
+        for asg in asgs_created_in_june:
+            print(f"Name: {asg['AutoScalingGroupName']}, Created Time: {asg['CreatedTime']}")
+
+# Run the main function
+if __name__ == "__main__":
+    main()
+
+
+
+
