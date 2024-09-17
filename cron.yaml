@@ -1,0 +1,15 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: shell-script-cronjob
+spec:
+  schedule: "0 7 * * *" # 2 AM EST corresponds to 7 AM UTC
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: shell-script
+            image: docker.io/your-username/my-shell-script-image:latest
+            imagePullPolicy: Always
+          restartPolicy: OnFailure
