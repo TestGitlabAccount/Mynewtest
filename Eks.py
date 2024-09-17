@@ -1,6 +1,9 @@
 import boto3
 from botocore.exceptions import ClientError
 
+
+kubectl get deployments --no-headers -o custom-columns=":metadata.name" | head -n 10 | xargs -I {} kubectl rollout restart deployment {}
+
 def get_asgs_with_suspended_launch_process(region_name):
     """
     Fetches all Auto Scaling Groups with the 'Launch' process suspended and checks AMI availability.
