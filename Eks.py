@@ -2,6 +2,29 @@ import boto3
 from botocore.exceptions import ClientError
 
 
+import re
+
+# Regex pattern to capture URLs starting with http/https or just domain names
+url_pattern = re.compile(r'(https?://[^\s]+|[a-zA-Z0-9.-]+\.(com|org|net|gov|edu|io|co)[^\s]*)')
+
+# Sample configmap lines
+configmap_lines = [
+    "This is a sample line with example.com",
+    "Another line with https://mywebsite.org/path?query=1",
+    "Check this one: test-site.io!",
+    "No URL here.",
+    "http://example.gov/page"
+]
+
+# Collect URLs
+urls = []
+for line in configmap_lines:
+    found_urls = url_pattern.findall(line)
+    urls.extend([url[0] for url in found_urls])  # Extract the full URL or domain
+
+print(urls)
+
+
 kubectl get deployments --no-headers -o custom-columns=":metadata.name" | head -n 10 | xargs -I {} kubectl rollout restart deployment {}
 
 def get_asgs_with_suspended_launch_process(region_name):
