@@ -65,7 +65,34 @@ if __name__ == "__main__":
     main()
 
 
+import boto3
 
+# Initialize a session using AWS credentials
+client = boto3.client('support', region_name='us-east-1')  # AWS Support API is only available in 'us-east-1'
+
+# Define the number of cases you want to retrieve
+max_results = 5
+
+# Get the list of support cases
+response = client.describe_cases(
+    includeResolvedCases=False,  # Exclude resolved cases
+    maxResults=max_results        # Limit the number of cases retrieved
+)
+
+# Extract and print details of the cases
+cases = response.get('cases', [])
+
+if cases:
+    print(f"Displaying the first {len(cases)} cases:")
+    for case in cases:
+        print(f"Case ID: {case['caseId']}")
+        print(f"Subject: {case['subject']}")
+        print(f"Status: {case['status']}")
+        print(f"Opened by: {case['submittedBy']}")
+        print(f"Opened on: {case['timeCreated']}")
+        print("-" * 50)
+else:
+    print("No open cases found.")
 
 
 
