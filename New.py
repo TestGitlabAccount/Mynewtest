@@ -1,62 +1,52 @@
 import boto3
-from botocore.exceptions import ClientError
 
-def check_alb_permissions():
-    try:
-        elbv2_client = boto3.client('elbv2')
-        response = elbv2_client.describe_load_balancers()
-        alb_names = [lb['LoadBalancerName'] for lb in response['LoadBalancers']]
-        print("ALB Names: ", alb_names)
-        return True
-    except ClientError as e:
-        print(f"Error checking ALB permissions: {e}")
-        return False
+def get_alb_tags_by_vsad():
+    # Create a Boto3 client for ELBv2 (ALBs)
+    client = boto3.client('elbv2')
 
-def check_nlb_permissions():
-    try:
-        elbv2_client = boto3.client('elbv2')
-        response = elbv2_client.describe_load_balancers()
-        nlb_names = [lb['LoadBalancerName'] for lb in response['LoadBalancers'] if lb['Type'] == 'network']
-        print("NLB Names: ", nlb_names)
-        return True
-    except ClientError as e:
-        print(f"Error checking NLB permissions: {e}")
-        return False
+    # Step 1: Retrieve all ALBs
+    response = client.describe_load_balancers()
+    load_balancers = response['LoadBalancers']
 
-def check_ebs_volumes_permissions():
-    try:
-        ec2_client = boto3.client('ec2')
-        response = ec2_client.describe_volumes()
-        volume_ids = [vol['VolumeId'] for vol in response['Volumes']]
-        print("EBS Volume IDs: ", volume_ids)
-        return True
-    except ClientError as e:
-        print(f"Error checking EBS Volume permissions: {e}")
-        return False
+    vsad_data = {}
 
-def check_ebs_snapshots_permissions():
-    try:
-        ec2_client = boto3.client('ec2')
-        response = ec2_client.describe_snapshots(OwnerIds=['self'])
-        snapshot_ids = [snap['SnapshotId'] for snap in response['Snapshots']]
-        print("EBS Snapshot IDs: ", snapshot_ids)
-        return True
-    except ClientError as e:
-        print(f"Error checking EBS Snapshot permissions: {e}")
-        return False
+    # Step 2: Iterate over each ALB to retrieve its tags
+    for lb in load_balancers:
+        lb_name = lb['LoadBalancerName']
+        lb_arn = lb['LoadBalancerArn']
 
-def check_boto3_permissions():
-    print("Checking ALB permissions:")
-    check_alb_permissions()
+        # Step 3: Get the tags for the ALB using its ARN
+        tags_response = client.describe_tags(
+            ResourceArns=[lb_arn]
+        )
+        
+        # Step 4: Extract tags into a dictionary
+        tags = {tag['Key']: tag['Value'] for tag in tags_response['TagDescriptions'][0]['Tags']}
+        
+        # Step 5: Get the VSAD tag value if it exists
+        vsad = tags.get('VSAD')
+
+        # If VSAD tag is found, group the ALB data under the corresponding VSAD key
+        if vsad:
+            if vsad not in vsad_data:
+                vsad_data[vsad] = []
+
+            vsad_data[vsad].append({
+                'LoadBalancerName': lb_name,
+                'LoadBalancerArn': lb_arn,
+                'Tags': tags
+            })
     
-    print("\nChecking NLB permissions:")
-    check_nlb_permissions()
+    return vsad_data
 
-    print("\nChecking EBS Volume permissions:")
-    check_ebs_volumes_permissions()
-
-    print("\nChecking EBS Snapshot permissions:")
-    check_ebs_snapshots_permissions()
-
-if __name__ == "__main__":
-    check_boto3_permissions()
+# Example usage
+if __name__ == '__main__':
+    vsad_data = get_alb_tags_by_vsad()
+    
+    for vsad, albs in vsad_data.items():
+        print(f"VSAD: {vsad}")
+        for alb in albs:
+            print(f"  ALB Name: {alb['LoadBalancerName']}")
+            print(f"  ALB ARN: {alb['LoadBalancerArn']}")
+            print(f"  Tags: {alb['Tags']}")
+        print("\n")
