@@ -211,6 +211,58 @@ if __name__ == "__main__":
 
 
 
+
+
+from fastapi import FastAPI
+import boto3
+
+# Initialize FastAPI
+app = FastAPI()
+
+# Create a Boto3 client for RDS
+rds_client = boto3.client('rds')
+
+@app.get("/rds/zero-connections")
+async def get_zero_connections_rds():
+    # Describe all RDS instances
+    db_instances = rds_client.describe_db_instances()
+    zero_connections_list = []
+
+    for instance in db_instances['DBInstances']:
+        instance_id = instance['DBInstanceIdentifier']
+
+        # Get the CloudWatch metrics for database connections
+        cloudwatch_client = boto3.client('cloudwatch')
+        response = cloudwatch_client.get_metric_statistics(
+            Namespace='AWS/RDS',
+            MetricName='DatabaseConnections',
+            Dimensions=[
+                {
+                    'Name': 'DBInstanceIdentifier',
+                    'Value': instance_id
+                },
+            ],
+            StartTime=datetime.utcnow() - timedelta(minutes=5),
+            EndTime=datetime.utcnow(),
+            Period=300,
+            Statistics=['Average']
+        )
+
+        # Check if the average number of connections is 0
+        if response['Datapoints']:
+            average_connections = response['Datapoints'][0]['Average']
+            if average_connections == 0:
+                zero_connections_list.append(instance_id)
+
+    return {"zero_connection_instances": zero_connections_list}
+
+
+
+
+
+
+
+
 import boto3
 
 def get_opensearch_domains():
