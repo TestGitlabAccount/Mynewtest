@@ -149,3 +149,61 @@ def find_and_delete_disconnected_target_groups():
         "disconnected_target_groups": disconnected_target_groups,
         "deleted_target_groups_report": deleted_target_groups_report
     }
+
+
+
+
+
+from fastapi import FastAPI
+import boto3
+
+app = FastAPI()
+
+# Initialize Boto3 EC2 and ELB clients
+elb_client = boto3.client('elbv2')
+ec2_client = boto3.client('ec2')
+
+
+# Existing Load Balancer and Target Group cleanup APIs go here ...
+
+
+# New API to check EC2 volumes' DeleteOnTermination attribute
+@app.get("/check-volumes")
+def check_and_modify_ec2_volumes():
+    instances = ec2_client.describe_instances()['Reservations']
+    modified_instances = []
+
+    for reservation in instances:
+        for instance in reservation['Instances']:
+            instance_id = instance['InstanceId']
+            block_device_mappings = instance.get('BlockDeviceMappings', [])
+
+            for device in block_device_mappings:
+                volume_id = device['Ebs']['VolumeId']
+                delete_on_termination = device['Ebs']['DeleteOnTermination']
+
+                # If DeleteOnTermination is set to NO, modify it to YES
+                if not delete_on_termination:
+                    # Modify the volume to set DeleteOnTermination to YES
+                    ec2_client.modify_instance_attribute(
+                        InstanceId=instance_id,
+                        BlockDeviceMappings=[
+                            {
+                                'DeviceName': device['DeviceName'],
+                                'Ebs': {
+                                    'DeleteOnTermination': True
+                                }
+                            }
+                        ]
+                    )
+                    modified_instances.append(instance_id)
+
+    if modified_instances:
+        return {
+            "message": "The DeleteOnTermination attribute was modified to YES for the following instances:",
+            "modified_instances": modified_instances
+        }
+    else:
+        return {
+            "message": "No modifications were necessary. All volumes already had DeleteOnTermination set to YES."
+        }
