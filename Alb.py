@@ -21,6 +21,91 @@ def find_and_delete_disconnected_load_balancers():
             print(f"Deleted load balancer {lb['LoadBalancerName']}.")
 
     # Reporting the deleted load balancers
+
+
+
+
+
+    from fastapi import FastAPI, HTTPException
+from typing import List, Dict
+import boto3
+
+app = FastAPI()
+
+# Initialize the AWS ELBv2 client
+elbv2_client = boto3.client('elbv2')
+
+# Function to delete ALBs by their ARNs
+def delete_albs_by_arn(albs: List[Dict[str, str]]) -> Dict[str, List[str]]:
+    deleted_albs = []
+    failed_albs = []
+    
+    for alb in albs:
+        try:
+            elbv2_client.delete_load_balancer(LoadBalancerArn=alb["ALBArn"])
+            deleted_albs.append(alb["ALBname"])
+        except Exception as e:
+            failed_albs.append(alb["ALBname"])
+
+    return {"deleted": deleted_albs, "failed": failed_albs}
+
+@app.post("/delete-albs/")
+async def delete_albs(data: Dict[str, List[Dict[str, str]]]):
+    """
+    Deletes the ALBs based on the given VSAD categorized response data.
+
+    Input Format Example:
+    {
+        "vsad1": [
+            {"ALBname": "some alb name", "ALBArn": "somearn name"},
+            {"ALBname": "some alb name", "ALBArn": "somearn name"}
+        ],
+        "vsad2": [
+            {"ALBname": "some alb name", "ALBArn": "somearn name"},
+            {"ALBname": "some alb name", "ALBArn": "somearn name"}
+        ]
+    }
+    """
+    final_response = {}
+
+    for vsad, albs in data.items():
+        # Delete ALBs for this VSAD
+        alb_deletion_results = delete_albs_by_arn(albs)
+        final_response[vsad] = alb_deletion_results
+
+    return final_response
+
+
+
+
+    @app.post("/delete-tgs/")
+async def delete_tgs(data: Dict[str, List[Dict[str, str]]]):
+    """
+    Deletes the target groups based on the given VSAD categorized response data.
+    """
+    final_response = {}
+
+    for vsad, tgs in data.items():
+        # Delete Target Groups for this VSAD
+        tg_deletion_results = delete_target_groups_by_arn(tgs)
+        final_response[vsad] = tg_deletion_results
+
+    return final_response
+
+# Function to delete target groups by their ARNs
+def delete_target_groups_by_arn(tgs: List[Dict[str, str]]) -> Dict[str, List[str]]:
+    deleted_tgs = []
+    failed_tgs = []
+    
+    for tg in tgs:
+        try:
+            elbv2_client.delete_target_group(TargetGroupArn=tg["TargetGroupArn"])
+            deleted_tgs.append(tg["TargetGroupName"])
+        except Exception as e:
+            failed_tgs.append(tg["TargetGroupName"])
+
+    return {"deleted": deleted_tgs, "failed": failed_tgs}
+
     if deleted_load_balancers_report:
         print("\nDeleted Load Balancers Report:")
         for lb_name in deleted_load_balancers_report:
