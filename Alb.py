@@ -207,3 +207,118 @@ def check_and_modify_ec2_volumes():
         return {
             "message": "No modifications were necessary. All volumes already had DeleteOnTermination set to YES."
         }
+
+
+
+
+
+
+
+from fastapi import FastAPI
+import boto3
+
+app = FastAPI()
+
+# Initialize the AWS ELBv2 client
+elbv2_client = boto3.client('elbv2')
+
+# Function to fetch ALBs without Target Groups, categorized by VSAD
+def get_albs_without_target_groups():
+    unattached_albs_by_vsad = {}
+
+    # Get all ALBs (Application Load Balancers)
+    load_balancers = elbv2_client.describe_load_balancers()
+
+    # Iterate through each ALB
+    for lb in load_balancers['LoadBalancers']:
+        lb_arn = lb['LoadBalancerArn']
+        lb_name = lb['LoadBalancerName']
+
+        # Check if there are target groups attached to this ALB
+        target_groups = elbv2_client.describe_target_groups(LoadBalancerArn=lb_arn)
+
+        # If no target groups are attached
+        if not target_groups['TargetGroups']:
+            # Get ALB tags
+            tags = elbv2_client.describe_tags(ResourceArns=[lb_arn])
+
+            # Extract VSAD tag, if present
+            vsad_tag = None
+            for tag_description in tags['TagDescriptions']:
+                for tag in tag_description['Tags']:
+                    if tag['Key'] == 'VSAD':
+                        vsad_tag = tag['Value']
+                        break
+            
+            # Categorize by VSAD level
+            if vsad_tag:
+                if vsad_tag not in unattached_albs_by_vsad:
+                    unattached_albs_by_vsad[vsad_tag] = []
+                unattached_albs_by_vsad[vsad_tag].append({
+                    "ALBName": lb_name,
+                    "ALBArn": lb_arn
+                })
+
+    return unattached_albs_by_vsad
+
+
+
+
+
+from fastapi import FastAPI
+import boto3
+
+app = FastAPI()
+
+# Initialize the AWS ELBv2 client
+elbv2_client = boto3.client('elbv2')
+
+# Function to fetch Target Groups without Load Balancers, categorized by VSAD
+def get_target_groups_without_lbs():
+    unattached_tgs_by_vsad = {}
+
+    # Get all target groups
+    target_groups = elbv2_client.describe_target_groups()
+
+    # Iterate through each target group
+    for tg in target_groups['TargetGroups']:
+        tg_arn = tg['TargetGroupArn']
+        tg_name = tg['TargetGroupName']
+
+        # Check if the target group is attached to any load balancers
+        lb_arns = tg.get('LoadBalancerArns', [])
+
+        # If no load balancers are attached
+        if not lb_arns:
+            # Get tags associated with the target group
+            tags = elbv2_client.describe_tags(ResourceArns=[tg_arn])
+
+            # Extract VSAD tag, if present
+            vsad_tag = None
+            for tag_description in tags['TagDescriptions']:
+                for tag in tag_description['Tags']:
+                    if tag['Key'] == 'VSAD':
+                        vsad_tag = tag['Value']
+                        break
+            
+            # Categorize by VSAD level
+            if vsad_tag:
+                if vsad_tag not in unattached_tgs_by_vsad:
+                    unattached_tgs_by_vsad[vsad_tag] = []
+                unattached_tgs_by_vsad[vsad_tag].append({
+                    "TargetGroupName": tg_name,
+                    "TargetGroupArn": tg_arn
+                })
+
+    return unattached_tgs_by_vsad
+
+@app.get("/tgs-unattached/")
+async def list_tgs_unattached():
+    unattached_tgs = get_target_groups_without_lbs()
+    return {"unattached_tgs_by_vsad": unattached_tgs}
+
+@app.get("/albs-unattached/")
+async def list_albs_unattached():
+    unattached_albs = get_albs_without_target_groups()
+    return {"unattached_albs_by_vsad": unattached_albs}
+
