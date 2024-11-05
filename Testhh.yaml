@@ -118,3 +118,31 @@
     - name: Kafka Start Confirmation
       debug:
         msg: "Kafka has been successfully started."
+
+
+
+
+---
+- hosts: cassandra_nodes
+  become: true
+  become_method: pbrun
+  become_user: cassandra
+  gather_facts: no
+  vars:
+    action: "start"  # Specify 'start' or 'stop'
+    cassandra_password: ""  # Set the password here or pass it as an extra variable
+
+  tasks:
+  
+    - name: Check Cassandra node status
+      shell: nodetool status
+      register: cassandra_status
+      changed_when: false
+
+    - name: Verify Cassandra is running
+      set_fact:
+        cassandra_running: "{{ 'Up' in cassandra_status.stdout }}"
+
+    - name: Output Cassandra node status
+      debug:
+        msg: "Cassandra nodes are {{ 'running
