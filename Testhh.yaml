@@ -1,0 +1,70 @@
+---
+- hosts: kafka_nodes
+  become: true
+  become_method: pbrun
+  become_user: kafka
+  gather_facts: no
+  vars:
+    action: start  # Specify 'start' or 'stop'
+
+  tasks:
+
+    - name: Check Kafka and Zookeeper status using jps
+      shell: jps
+      register: jps_output
+      changed_when: false
+
+    - name: Check if Zookeeper is running (QuorumPeerMain)
+      set_fact:
+        zookeeper_running: "{{ 'QuorumPeerMain' in jps_output.stdout }}"
+
+    - name: Check if Kafka is running
+      set_fact:
+        kafka_running: "{{ 'Kafka' in jps_output.stdout }}"
+
+    - name: Check if Zookeeper is in the correct state
+      debug:
+        msg: "Zookeeper is {{ 'running' if zookeeper_running else 'stopped' }}"
+
+    - name: Check if Kafka is in the correct state
+      debug:
+        msg: "Kafka is {{ 'running' if kafka_running else 'stopped' }}"
+
+    # Actions for stopping Kafka and Zookeeper
+    - name: Stop Zookeeper
+      shell: /opt/apps/kafka/kafka/bin/zookeeper-server-stop
+      when: action == "stop" and zookeeper_running
+      notify: Zookeeper Stop Confirmation
+
+    - name: Stop Kafka
+      shell: /opt/apps/kafka/kafka/bin/kafka-server-stop
+      when: action == "stop" and kafka_running
+      notify: Kafka Stop Confirmation
+
+    # Actions for starting Kafka and Zookeeper
+    - name: Start Zookeeper
+      shell: nohup /opt/apps/kafka/kafka/bin/zookeeper-server-start -daemon /app/kafka/kafka/zookeeper.properties &
+      when: action == "start" and not zookeeper_running
+      notify: Zookeeper Start Confirmation
+
+    - name: Start Kafka
+      shell: nohup /opt/apps/kafka/kafka/bin/kafka-server-start -daemon /app/kafka/kafka/server.properties &
+      when: action == "start" and not kafka_running
+      notify: Kafka Start Confirmation
+
+  handlers:
+    - name: Zookeeper Stop Confirmation
+      debug:
+        msg: "Zookeeper has been successfully stopped."
+
+    - name: Kafka Stop Confirmation
+      debug:
+        msg: "Kafka has been successfully stopped."
+
+    - name: Zookeeper Start Confirmation
+      debug:
+        msg: "Zookeeper has been successfully started."
+
+    - name: Kafka Start Confirmation
+      debug:
+        msg: "Kafka has been successfully started."
