@@ -65,6 +65,56 @@
       debug:
         msg: "Zookeeper has been successfully started."
 
+
+
+
+
+
+
+
+
+---
+- name: Check Fabric status
+  shell: pbrun k2fabric status
+  register: fabric_status
+  changed_when: false
+
+- name: Start Fabric if not running
+  shell: pbrun k2fabric start
+  when: "'running' not in fabric_status.stdout"
+
+- name: Restart Fabric
+  shell: pbrun k2fabric restart
+  when: restart_fabric
+  notify:
+    - Check Fabric Cluster Status
+    - Check for long-running tasks
+
+- name: Force stop Fabric
+  shell: pbrun k2fabric force-stop
+  when: force_stop_fabric
+  notify:
+    - Stop Fabric
+
+- name: Check Fabric Cluster Status
+  shell: pbrun k2fabric cluster-status
+  register: fabric_cluster_status
+  changed_when: false
+
+- name: Check for long-running tasks
+  shell: pbrun check_long_running_tasks
+  register: long_tasks
+  when: "'task in progress' in fabric_cluster_status.stdout"
+
+- name: Mark tasks as completed or failed in TDM if tasks are stuck
+  shell: |
+    psql -U {{ db_user }} -d {{ db_name }} -f {{ lookup('template', 'tdm_update.sql.j2') }}
+  when: long_tasks.stdout != ""
+
+- name: Deploy TDM LU
+  shell: deploy_tdm_lu
+  when: deploy_tdm_lu
+
     - name: Kafka Start Confirmation
       debug:
         msg: "Kafka has been successfully started."
