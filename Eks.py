@@ -1,4 +1,69 @@
 import boto3
+
+def get_buckets_by_vsad():
+    s3_client = boto3.client('s3')
+    s3control_client = boto3.client('s3control')
+    
+    # Initialize a dictionary to store data by VSAD
+    vsad_data = {}
+    
+    # List all buckets
+    response = s3_client.list_buckets()
+    buckets = response['Buckets']
+    
+    # Iterate through each bucket
+    for bucket in buckets:
+        bucket_name = bucket['Name']
+        
+        # Try to get bucket tags
+        try:
+            tag_response = s3_client.get_bucket_tagging(Bucket=bucket_name)
+            tags = {tag['Key']: tag['Value'] for tag in tag_response['TagSet']}
+            
+            # Extract VSAD-specific tags
+            vsad_name = tags.get('VSADName')
+            user_name = tags.get('UserName')
+            user_id = tags.get('UserID')
+            
+            # Group data by VSAD
+            if vsad_name:
+                if vsad_name not in vsad_data:
+                    vsad_data[vsad_name] = {
+                        'Count': 0,
+                        'Buckets': []
+                    }
+                
+                vsad_data[vsad_name]['Buckets'].append({
+                    'BucketName': bucket_name,
+                    'UserName': user_name,
+                    'UserID': user_id,
+                    'VSADName': vsad_name
+                })
+                vsad_data[vsad_name]['Count'] += 1
+
+        except s3_client.exceptions.NoSuchTagSet:
+            # Handle buckets without tags
+            print(f"No tags found for bucket: {bucket_name}")
+    
+    return vsad_data
+
+# Call the function and print the results
+buckets_by_vsad = get_buckets_by_vsad()
+for vsad, data in buckets_by_vsad.items():
+    print(f"VSAD: {vsad}, Count: {data['Count']}")
+    for bucket_info in data['Buckets']:
+        print(bucket_info)
+
+
+
+
+
+
+
+
+
+
+import boto3
 from botocore.exceptions import ClientError
 
 
