@@ -1,3 +1,34 @@
+# nodetool_status.yml
+---
+- name: Get Cassandra Node Status in Table Format
+  hosts: all
+  gather_facts: no
+  tasks:
+    - name: Run nodetool status command
+      shell: "runuser -l cassandra -c 'nodetool status'"
+      register: nodetool_output
+      ignore_errors: yes
+
+    - name: Print the nodetool status output in a readable format
+      debug:
+        msg: |
+          Cassandra Node Status:
+          ---------------------
+          Datacenter: {{ nodetool_output.stdout | regex_search('Datacenter: (.*)', '\\1') }}
+          {% for line in nodetool_output.stdout_lines[1:] %}
+          {{ '%-8s | %-10s | %-5s | %-5s | %-10s | %-8s | %s' | format(
+            line.split()[0],  # Status (Up/Down)
+            line.split()[1],  # State (Normal/Leaving/Joining/Moving)
+            line.split()[2],  # Load
+            line.split()[3],  # Tokens
+            line.split()[4],  # Owns
+            line.split()[5],  # Host
+            line.split()[6]   # Rack
+          ) }}
+          {% endfor %}
+
+
+
 apiVersion: batch/v1
 kind: CronJob
 metadata:
