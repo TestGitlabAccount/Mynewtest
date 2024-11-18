@@ -1,4 +1,58 @@
 import boto3
+from datetime import datetime
+
+# Initialize EC2 client
+ec2 = boto3.client('ec2')
+
+# Function to get available volumes and their last detached date
+def get_available_volumes_with_last_detached():
+    try:
+        # Describe all volumes with "available" state
+        response = ec2.describe_volumes(
+            Filters=[
+                {
+                    'Name': 'status',
+                    'Values': ['available']
+                }
+            ]
+        )
+        
+        # Iterate over each available volume
+        for volume in response['Volumes']:
+            volume_id = volume['VolumeId']
+            last_detached_time = None
+            
+            # Get the volume's attachment history
+            if 'Attachments' in volume:
+                for attachment in volume['Attachments']:
+                    # Check if the volume was attached and detached
+                    if attachment['State'] == 'detached':
+                        detach_time = attachment['DetachTime']
+                        # Update the last_detached_time to the most recent detach time
+                        if last_detached_time is None or detach_time > last_detached_time:
+                            last_detached_time = detach_time
+            
+            # Print volume ID and last detached time if available
+            if last_detached_time:
+                print(f"Volume ID: {volume_id}, Last Detached: {last_detached_time}")
+            else:
+                print(f"Volume ID: {volume_id}, No detach record found.")
+                
+    except Exception as e:
+        print(f"Error: {str(e)}")
+
+# Run the function
+get_available_volumes_with_last_detached()
+
+
+
+
+
+
+
+
+
+import boto3
 
 # Initialize the EC2 client
 ec2_client = boto3.client('ec2')
@@ -53,12 +107,25 @@ def fetch_ec2_with_volumes_without_delete_on_termination():
 
         return vsad_results
 
+
+    
+
     except Exception as e:
         print(f"Error fetching instances: {str(e)}")
         return {}
 
 # Fetch and print the EC2 instances with volumes that don't have DeleteOnTermination set to True
 vsad_volumes = fetch_ec2_with_volumes_without_delete_on_termination()
+
+
+
+
+
+
+
+
+
+
 
 # Print the results
 for vsad, instances in vsad_volumes.items():
