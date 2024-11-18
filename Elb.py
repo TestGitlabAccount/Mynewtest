@@ -4,6 +4,65 @@ from datetime import datetime
 # Initialize EC2 client
 ec2 = boto3.client('ec2')
 
+# Function to get available volumes and their last detached date using paginator
+def get_available_volumes_with_last_detached():
+    try:
+        # Initialize paginator for describe_volumes
+        paginator = ec2.get_paginator('describe_volumes')
+        
+        # Create a pagination iterator with the required filters
+        page_iterator = paginator.paginate(
+            Filters=[
+                {
+                    'Name': 'status',
+                    'Values': ['available']
+                }
+            ]
+        )
+        
+        # Iterate over each page of volumes
+        for page in page_iterator:
+            # Iterate over each volume in the current page
+            for volume in page['Volumes']:
+                volume_id = volume['VolumeId']
+                last_detached_time = None
+
+                # Check the volume's attachment history
+                if 'Attachments' in volume:
+                    for attachment in volume['Attachments']:
+                        # Check if the volume was detached
+                        if attachment['State'] == 'detached':
+                            detach_time = attachment['DetachTime']
+                            # Update the last_detached_time to the most recent detach time
+                            if last_detached_time is None or detach_time > last_detached_time:
+                                last_detached_time = detach_time
+                
+                # Print volume ID and last detached time if available
+                if last_detached_time:
+                    print(f"Volume ID: {volume_id}, Last Detached: {last_detached_time}")
+                else:
+                    print(f"Volume ID: {volume_id}, No detach record found.")
+                
+    except Exception as e:
+        print(f"Error: {str(e)}")
+
+# Run the function
+get_available_volumes_with_last_detached()
+
+
+
+
+
+
+
+
+
+import boto3
+from datetime import datetime
+
+# Initialize EC2 client
+ec2 = boto3.client('ec2')
+
 # Function to get available volumes and their last detached date
 def get_available_volumes_with_last_detached():
     try:
