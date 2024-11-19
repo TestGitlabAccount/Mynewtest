@@ -1,4 +1,118 @@
 import boto3
+from datetime import datetime, timedelta
+
+# Initialize clients for EC2 and CloudTrail
+ec2 = boto3.client('ec2')
+cloudtrail = boto3.client('cloudtrail')
+
+# Function to get available volumes with their last detach time and organize by VSAD
+def get_volumes_vsad_wise():
+    try:
+        # Initialize paginator for describe_volumes
+        paginator = ec2.get_paginator('describe_volumes')
+        
+        # Create a pagination iterator with the required filters
+        page_iterator = paginator.paginate(
+            Filters=[
+                {
+                    'Name': 'status',
+                    'Values': ['available']
+                }
+            ]
+        )
+        
+        # Dictionary to store VSAD-wise volume data
+        vsad_data = {}
+
+        # Iterate over each page of volumes
+        for page in page_iterator:
+            # Iterate over each volume in the current page
+            for volume in page['Volumes']:
+                volume_id = volume['VolumeId']
+                vsad = "Unknown"
+
+                # Retrieve the VSAD tag, if present
+                if 'Tags' in volume:
+                    for tag in volume['Tags']:
+                        if tag['Key'] == 'VSAD':
+                            vsad = tag['Value']
+                            break
+
+                # Fetch the last detach time using CloudTrail
+                last_detach_time = get_last_detach_time(volume_id)
+
+                # If no detach time is found, skip the volume
+                if not last_detach_time:
+                    continue
+
+                # Organize data by VSAD
+                if vsad not in vsad_data:
+                    vsad_data[vsad] = []
+
+                # Append the volume details to the VSAD entry
+                vsad_data[vsad].append({
+                    'VolumeId': volume_id,
+                    'LastDetached': last_detach_time
+                })
+
+        # Print the VSAD-wise organized volume data
+        for vsad, volumes in vsad_data.items():
+            print(f"\nVSAD: {vsad}")
+            for vol in volumes:
+                print(f"  Volume ID: {vol['VolumeId']}, Last Detached: {vol['LastDetached']}")
+                
+    except Exception as e:
+        print(f"Error: {str(e)}")
+
+# Function to get the last detach time for a volume using CloudTrail
+def get_last_detach_time(volume_id):
+    try:
+        # Initialize CloudTrail paginator to search for DetachVolume events
+        paginator = cloudtrail.get_paginator('lookup_events')
+        
+        # Set a filter to search for DetachVolume events for the given volume
+        page_iterator = paginator.paginate(
+            LookupAttributes=[
+                {
+                    'AttributeKey': 'EventName',
+                    'AttributeValue': 'DetachVolume'
+                }
+            ],
+            StartTime=datetime.now() - timedelta(days=90),  # Search last 90 days
+            EndTime=datetime.now()
+        )
+
+        # Iterate over each page of CloudTrail events
+        for page in page_iterator:
+            for event in page['Events']:
+                # Check if the volume ID matches in the event resources
+                for resource in event['Resources']:
+                    if resource['ResourceType'] == 'AWS::EC2::Volume' and resource['ResourceName'] == volume_id:
+                        # Return the event time when the volume was detached
+                        return event['EventTime']
+                        
+        # If no event is found, return None
+        return None
+
+    except Exception as e:
+        print(f"Error fetching detach time for volume {volume_id}: {str(e)}")
+        return None
+
+# Run the function
+get_volumes_vsad_wise()
+
+
+
+
+
+
+
+
+
+
+
+
+import boto3
 from datetime import datetime
 
 # Initialize EC2 client
