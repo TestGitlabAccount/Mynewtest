@@ -4,6 +4,83 @@ from datetime import datetime
 # Initialize EC2 client
 ec2 = boto3.client('ec2')
 
+# Function to get available volumes and their last detached date using paginator and organize by VSAD
+def get_volumes_vsad_wise():
+    try:
+        # Initialize paginator for describe_volumes
+        paginator = ec2.get_paginator('describe_volumes')
+        
+        # Create a pagination iterator with the required filters
+        page_iterator = paginator.paginate(
+            Filters=[
+                {
+                    'Name': 'status',
+                    'Values': ['available']
+                }
+            ]
+        )
+        
+        # Dictionary to store VSAD-wise volume data
+        vsad_data = {}
+
+        # Iterate over each page of volumes
+        for page in page_iterator:
+            # Iterate over each volume in the current page
+            for volume in page['Volumes']:
+                volume_id = volume['VolumeId']
+                last_detached_time = None
+                vsad = "Unknown"
+
+                # Retrieve the VSAD tag, if present
+                if 'Tags' in volume:
+                    for tag in volume['Tags']:
+                        if tag['Key'] == 'VSAD':
+                            vsad = tag['Value']
+                            break
+
+                # Check the volume's attachment history
+                if 'Attachments' in volume:
+                    for attachment in volume['Attachments']:
+                        # Check if the volume was detached
+                        if attachment['State'] == 'detached':
+                            detach_time = attachment['DetachTime']
+                            # Update the last_detached_time to the most recent detach time
+                            if last_detached_time is None or detach_time > last_detached_time:
+                                last_detached_time = detach_time
+                
+                # Organize data by VSAD
+                if vsad not in vsad_data:
+                    vsad_data[vsad] = []
+
+                # Append the volume details to the VSAD entry
+                vsad_data[vsad].append({
+                    'VolumeId': volume_id,
+                    'LastDetached': last_detached_time if last_detached_time else "No detach record found"
+                })
+
+        # Print the VSAD-wise organized volume data
+        for vsad, volumes in vsad_data.items():
+            print(f"\nVSAD: {vsad}")
+            for vol in volumes:
+                print(f"  Volume ID: {vol['VolumeId']}, Last Detached: {vol['LastDetached']}")
+                
+    except Exception as e:
+        print(f"Error: {str(e)}")
+
+# Run the function
+get_volumes_vsad_wise()
+
+
+
+
+
+
+import boto3
+from datetime import datetime
+
+# Initialize EC2 client
+ec2 = boto3.client('ec2')
+
 # Function to get available volumes and their last detached date using paginator
 def get_available_volumes_with_last_detached():
     try:
