@@ -1,4 +1,106 @@
 import boto3
+import concurrent.futures
+from datetime import datetime, timedelta
+
+# Initialize clients for EC2 and CloudTrail
+ec2 = boto3.client('ec2')
+cloudtrail = boto3.client('cloudtrail')
+
+# Fetch available volumes in parallel
+def fetch_available_volumes():
+    paginator = ec2.get_paginator('describe_volumes')
+    page_iterator = paginator.paginate(
+        Filters=[
+            {'Name': 'status', 'Values': ['available']}
+        ],
+        PaginationConfig={'PageSize': 100}
+    )
+
+    volumes = []
+    for page in page_iterator:
+        for volume in page['Volumes']:
+            volumes.append(volume)
+    return volumes
+
+# Fetch detach time for a volume using CloudTrail
+def get_last_detach_time(volume_id):
+    try:
+        paginator = cloudtrail.get_paginator('lookup_events')
+        page_iterator = paginator.paginate(
+            LookupAttributes=[
+                {'AttributeKey': 'EventName', 'AttributeValue': 'DetachVolume'}
+            ],
+            StartTime=datetime.now() - timedelta(days=90),
+            EndTime=datetime.now()
+        )
+
+        for page in page_iterator:
+            for event in page['Events']:
+                for resource in event['Resources']:
+                    if resource['ResourceType'] == 'AWS::EC2::Volume' and resource['ResourceName'] == volume_id:
+                        return event['EventTime']
+        return None
+    except Exception as e:
+        print(f"Error fetching detach time for volume {volume_id}: {str(e)}")
+        return None
+
+# Organize volumes by VSAD
+def organize_volumes_by_vsad(volumes):
+    vsad_data = {}
+    for volume in volumes:
+        vsad = "Unknown"
+        if 'Tags' in volume:
+            for tag in volume['Tags']:
+                if tag['Key'] == 'VSAD':
+                    vsad = tag['Value']
+                    break
+
+        if vsad not in vsad_data:
+            vsad_data[vsad] = []
+        vsad_data[vsad].append(volume)
+
+    return vsad_data
+
+# Main logic to process volumes and fetch detach times in parallel
+def process_volumes():
+    volumes = fetch_available_volumes()
+    print(f"Total available volumes: {len(volumes)}")
+
+    # Organize volumes by VSAD
+    vsad_data = organize_volumes_by_vsad(volumes)
+
+    # Fetch detach times in parallel
+    results = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        future_to_volume = {executor.submit(get_last_detach_time, vol['VolumeId']): vol for vol in volumes}
+
+        for future in concurrent.futures.as_completed(future_to_volume):
+            volume = future_to_volume[future]
+            try:
+                last_detach_time = future.result()
+                if last_detach_time:
+                    volume['LastDetached'] = last_detach_time
+                    vsad = next((tag['Value'] for tag in volume.get('Tags', []) if tag['Key'] == 'VSAD'), 'Unknown')
+                    if vsad not in results:
+                        results[vsad] = []
+                    results[vsad].append(volume)
+            except Exception as e:
+                print(f"Error processing volume {volume['VolumeId']}: {str(e)}")
+
+    # Display results
+    for vsad, volumes in results.items():
+        print(f"\nVSAD: {vsad}")
+        for vol in volumes:
+            print(f"  Volume ID: {vol['VolumeId']}, Last Detached: {vol['LastDetached']}")
+
+# Run the script
+process_volumes()
+
+
+
+
+
+import boto3
 import time
 import random
 from datetime import datetime, timedelta
