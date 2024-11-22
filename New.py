@@ -1,4 +1,96 @@
 import boto3
+import random
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# Initialize Boto3 clients
+ec2_client = boto3.client('ec2')
+cloudtrail_client = boto3.client('cloudtrail')
+
+# Function to implement exponential backoff with jitter
+def backoff_with_jitter(attempt, base_delay=1, max_delay=60):
+    # Exponential backoff with jitter formula
+    delay = min(base_delay * (2 ** attempt), max_delay)
+    # Adding jitter
+    delay_with_jitter = delay / 2 + random.uniform(0, delay / 2)
+    time.sleep(delay_with_jitter)
+
+# Function to get all available EBS volumes
+def get_available_volumes():
+    paginator = ec2_client.get_paginator('describe_volumes')
+    response_iterator = paginator.paginate(
+        Filters=[{'Name': 'status', 'Values': ['available']}]
+    )
+    available_volumes = []
+    for page in response_iterator:
+        for volume in page['Volumes']:
+            available_volumes.append(volume['VolumeId'])
+    return available_volumes
+
+# Function to get the detach time for a volume from CloudTrail with retry logic
+def get_detach_time(volume_id, max_retries=5):
+    attempt = 0
+    while attempt < max_retries:
+        try:
+            # Filter CloudTrail events for the specific volume and detach action
+            response = cloudtrail_client.lookup_events(
+                LookupAttributes=[
+                    {
+                        'AttributeKey': 'ResourceName',
+                        'AttributeValue': volume_id
+                    }
+                ],
+                MaxResults=10
+            )
+            
+            # Iterate through events to find the 'DetachVolume' event
+            for event in response['Events']:
+                if 'DetachVolume' in event['EventName']:
+                    return event['EventTime']
+            return None
+        except Exception as e:
+            print(f"Error fetching detach time for {volume_id}: {str(e)}")
+            
+            # Check if error is related to throttling
+            if 'Throttling' in str(e) or 'Rate exceeded' in str(e):
+                attempt += 1
+                print(f"Throttling detected. Attempt {attempt} with backoff...")
+                backoff_with_jitter(attempt)
+            else:
+                break  # For non-throttling errors, break the loop and do not retry
+    return None
+
+# Main function to collect detach times
+def collect_detach_times():
+    available_volumes = get_available_volumes()
+    print(f"Found {len(available_volumes)} available volumes.")
+
+    # Use ThreadPoolExecutor to parallelize the CloudTrail lookup
+    detach_times = {}
+    with ThreadPoolExecutor(max_workers=50) as executor:
+        futures = {executor.submit(get_detach_time, volume_id): volume_id for volume_id in available_volumes}
+        
+        for future in as_completed(futures):
+            volume_id = futures[future]
+            detach_time = future.result()
+            if detach_time:
+                detach_times[volume_id] = detach_time
+
+    return detach_times
+
+if __name__ == '__main__':
+    detach_info = collect_detach_times()
+    print(f"Detach times for available volumes: {detach_info}")
+
+
+
+
+
+
+
+
+
+import boto3
 
 def get_alb_tags_by_vsad():
     # Create a Boto3 client for ELBv2 (ALBs)
