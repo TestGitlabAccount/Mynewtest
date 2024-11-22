@@ -1,3 +1,21 @@
+import pandas as pd
+import json
+
+# Load JSON data from a file
+with open('data.json') as json_file:
+    json_data = json.load(json_file)
+
+# Convert JSON to a DataFrame
+df = pd.json_normalize(json_data)
+
+# Save DataFrame to Excel
+df.to_excel('output.xlsx', index=False, engine='openpyxl')
+
+print("JSON data has been successfully converted to Excel.")
+
+
+
+
 import boto3
 import random
 import time
