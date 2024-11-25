@@ -1,5 +1,36 @@
 ---
 ---
+
+---
+- name: Delete files starting with 0.log in /var/log/pod
+  hosts: all
+  become: yes
+  tasks:
+    - name: Find files starting with 0.log in /var/log/pod
+      find:
+        paths: /var/log/pod
+        patterns: "0.log*"
+        recurse: no
+      register: files_to_delete
+
+    - name: Show collected files
+      debug:
+        msg: "Collected files: {{ files_to_delete.files | map(attribute='path') | list }}"
+      when: files_to_delete.matched > 0
+
+    - name: Delete files starting with 0.log
+      shell: "rm -f {{ item.path }}"
+      loop: "{{ files_to_delete.files }}"
+      when: files_to_delete.matched > 0
+      register: deletion_results
+      changed_when: deletion_results is not skipped
+
+    - name: Show deleted files
+      debug:
+        msg: "Deleted files: {{ deletion_results.results | map(attribute='item.path') | list }}"
+      when: deletion_results is not skipped
+
+
 - name: Delete files starting with 0.log in /var/log/pod
   hosts: all
   become: yes
