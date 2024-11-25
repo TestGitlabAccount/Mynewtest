@@ -1,5 +1,46 @@
 ---
 ---
+
+---
+- name: Delete files starting with 0.log in /var/log/pods/{{namespace}}_ pattern
+  hosts: all
+  become: yes
+  vars:
+    namespace: "your_namespace_here"  # Replace this with the appropriate namespace or pass it as an extra var
+  tasks:
+    - name: Find directories matching /var/log/pods/{{ namespace }}_*
+      find:
+        paths: "/var/log/pods"
+        file_type: directory
+        patterns: "{{ namespace }}_*"
+        recurse: no
+      register: matching_directories
+
+    - name: Find files starting with 0.log in matching directories
+      find:
+        paths: "{{ item.path }}"
+        patterns: "0.log*"
+        recurse: yes
+      loop: "{{ matching_directories.files }}"
+      register: files_to_delete
+      when: matching_directories.matched > 0
+
+    - name: Show collected files
+      debug:
+        msg: "Collected files: {{ files_to_delete.results | map(attribute='files') | map('map', attribute='path') | flatten | list }}"
+      when: files_to_delete.results | length > 0
+
+    - name: Delete files starting with 0.log
+      shell: "rm -f {{ item.path }}"
+      loop: "{{ files_to_delete.results | map(attribute='files') | flatten }}"
+      when: files_to_delete.results | length > 0
+      register: deletion_results
+      changed_when: deletion_results is not skipped
+
+    - name: Show deleted files
+      debug:
+        msg: "Deleted files: {{ deletion_results.results | map(attribute='item.path') | list }}"
+      when: deletion_results is not skipped
 ---
 - name: Delete files starting with 0.log in /var/log/pods/{{namespace}}_ pattern
   hosts: all
