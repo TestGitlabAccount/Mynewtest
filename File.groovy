@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        KUBECONFIG = "/path/to/your/kubeconfig" // Set your kubeconfig path
+        KUBECONFIG = "/path/to/your/kubeconfig" // Replace with your kubeconfig file path
     }
 
     stages {
@@ -10,72 +10,72 @@ pipeline {
             steps {
                 script {
                     // Define variables
-                    def deploymentName = "your-deployment-name"
-                    def namespace = "your-namespace"
-                    def configFile = "path/to/config.yaml"
-
-                    // Shell script logic as inline Groovy string
-                    def updateJavaOptsScript = """
+                    def deploymentName = "your-deployment-name"  // Replace with your deployment name
+                    def namespace = "your-namespace"             // Replace with your namespace
+                    def configPath = "/path/to/your/kubeconfig"  // Replace with the path to your kubeconfig
+                    def requiredOpts = "-XX:+UseParallelOldGC -Xms512m -Xmx1024m -XX:+UseContainerSupport" // Set your required JAVA_OPTS
+                    
+                    // Shell script logic
+                    def updateJavaOptsScript = '''
                     #!/bin/bash
 
-                    DEPLOYMENT_NAME="${deploymentName}"
-                    NAMESPACE="${namespace}"
-                    CONFIG_FILE="${configFile}"
+                    DEPLOYMENT_NAME="''' + deploymentName + '''"
+                    NAMESPACE="''' + namespace + '''"
+                    KUBECONFIG="''' + configPath + '''"
+                    REQUIRED_OPTS="''' + requiredOpts + '''"
 
-                    # Read required Java options from the config file
-                    read_required_java_opts() {
-                      grep -E "^\s*-" "$CONFIG_FILE" | sed 's/-//g' | xargs
-                    }
+                    echo "Fetching deployment $DEPLOYMENT_NAME in namespace $NAMESPACE..."
 
-                    # Main logic to update JAVA_OPTS
-                    update_java_opts() {
-                      REQUIRED_OPTS=\$(read_required_java_opts)
+                    # Fetch the deployment JSON
+                    DEPLOYMENT=$(kubectl --kubeconfig="$KUBECONFIG" get deployment "$DEPLOYMENT_NAME" -n "$NAMESPACE" -o json)
+                    if [ $? -ne 0 ]; then
+                        echo "Failed to fetch the deployment. Please check the deployment name, namespace, and kubeconfig."
+                        exit 1
+                    fi
 
-                      # Fetch the current deployment
-                      echo "Fetching deployment \$DEPLOYMENT_NAME in namespace \$NAMESPACE..."
-                      DEPLOYMENT=\$(kubectl get deployment "\$DEPLOYMENT_NAME" -n "\$NAMESPACE" -o json)
+                    # Extract the current JAVA_OPTS
+                    CURRENT_OPTS=$(echo "$DEPLOYMENT" | jq -r '.spec.template.spec.containers[] | select(.env[]?.name == "JAVA_OPTS").env[] | select(.name == "JAVA_OPTS").value')
+                    [ -z "$CURRENT_OPTS" ] && CURRENT_OPTS=""
 
-                      # Extract JAVA_OPTS from the JSON
-                      CURRENT_OPTS=\$(echo "\$DEPLOYMENT" | jq -r '.spec.template.spec.containers[] | select(.env[]?.name == "JAVA_OPTS").env[] | select(.name == "JAVA_OPTS").value')
-                      [ -z "\$CURRENT_OPTS" ] && CURRENT_OPTS=""
-
-                      # Add missing options
-                      UPDATED_OPTS="\$CURRENT_OPTS"
-                      for OPT in \$REQUIRED_OPTS; do
-                        if [[ "\$UPDATED_OPTS" != *"\$OPT"* ]]; then
-                          UPDATED_OPTS+=" \$OPT"
+                    # Add missing options
+                    UPDATED_OPTS="$CURRENT_OPTS"
+                    for OPT in $REQUIRED_OPTS; do
+                        if [[ "$UPDATED_OPTS" != *"$OPT"* ]]; then
+                            UPDATED_OPTS+=" $OPT"
                         fi
-                      done
+                    done
 
-                      # If no changes are needed, exit
-                      if [ "\$CURRENT_OPTS" == "\$UPDATED_OPTS" ]; then
+                    # If no changes are needed, exit
+                    if [ "$CURRENT_OPTS" == "$UPDATED_OPTS" ]; then
                         echo "JAVA_OPTS is already up to date."
                         exit 0
-                      fi
+                    fi
 
-                      echo "Updating JAVA_OPTS..."
-                      # Patch the deployment
-                      kubectl patch deployment "\$DEPLOYMENT_NAME" -n "\$NAMESPACE" --type=json -p="
-                      [
+                    echo "Updating JAVA_OPTS..."
+                    # Patch the deployment with the updated JAVA_OPTS
+                    kubectl --kubeconfig="$KUBECONFIG" patch deployment "$DEPLOYMENT_NAME" -n "$NAMESPACE" --type=json -p="
+                    [
                         {
-                          \\"op\\": \\"replace\\",
-                          \\"path\\": \\"/spec/template/spec/containers/0/env\\",
-                          \\"value\\": [
-                            {
-                              \\"name\\": \\"JAVA_OPTS\\",
-                              \\"value\\": \\"\$UPDATED_OPTS\\"
-                            }
-                          ]
+                            \\"op\\": \\"replace\\",
+                            \\"path\\": \\"/spec/template/spec/containers/0/env\\",
+                            \\"value\\": [
+                                {
+                                    \\"name\\": \\"JAVA_OPTS\\",
+                                    \\"value\\": \\"$UPDATED_OPTS\\"
+                                }
+                            ]
                         }
-                      ]"
+                    ]"
 
-                      echo "Deployment updated successfully!"
-                    }
+                    if [ $? -eq 0 ]; then
+                        echo "Deployment updated successfully!"
+                    else
+                        echo "Failed to update the deployment."
+                        exit 1
+                    fi
+                    '''
 
-                    update_java_opts
-                    """
-
-                    // Run the shell script
+                    // Execute the shell script
                     sh script: updateJavaOptsScript, returnStdout: true
                 }
             }
