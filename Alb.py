@@ -1,3 +1,16 @@
+aws cloudtrail lookup-events \
+    --lookup-attributes AttributeKey=ResourceName,AttributeValue=<Instance-ID or IP> \
+    --event-name TerminateInstances \
+    --query 'Events[].CloudTrailEvent' \
+    --output json
+
+aws ec2 describe-network-interfaces \
+    --filters Name=addresses.private-ip-address,Values=<IP-Address> \
+    --query 'NetworkInterfaces[].Attachment.InstanceId'
+
+
+
+
 import boto3
 
 def find_and_delete_disconnected_load_balancers():
