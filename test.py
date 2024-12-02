@@ -1,4 +1,119 @@
 from fastapi import FastAPI, HTTPException
+from typing import Dict, Any
+import boto3
+import random
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from botocore.exceptions import ClientError
+
+app = FastAPI()
+
+# Constants
+MAX_ATTEMPTS = 5
+BASE_DELAY = 1
+MAX_DELAY = 30
+THREADS = 10
+
+def get_boto3_config(cluster_env, region):
+    """
+    Placeholder for custom boto3 configuration based on the environment and region.
+    Modify this to suit your setup.
+    """
+    return boto3.Config(retries={'max_attempts': 10, 'mode': 'standard'})
+
+def fetch_elasticache_clusters(region: str, cluster_env: str) -> Dict[str, Any]:
+    """
+    Fetches ElastiCache clusters and shard/node details.
+    """
+    session = boto3.Session()
+    aws_boto_config = get_boto3_config(cluster_env, region)
+    elasticache_client = session.client('elasticache', config=aws_boto_config, region_name=region)
+
+    def exponential_backoff_retry(func, *args, **kwargs):
+        for attempt in range(1, MAX_ATTEMPTS + 1):
+            try:
+                return func(*args, **kwargs)
+            except ClientError as ex:
+                error_code = ex.response['Error']['Code']
+                if error_code in ['ThrottlingException', 'RequestLimitExceeded']:
+                    wait_time = min(MAX_DELAY, BASE_DELAY * (2 ** attempt) + random.uniform(0, 1))
+                    time.sleep(wait_time)
+                else:
+                    raise ex
+            except Exception as e:
+                if attempt == MAX_ATTEMPTS:
+                    raise e
+        return None
+
+    def get_cluster_tags(cluster_arn):
+        return exponential_backoff_retry(
+            elasticache_client.list_tags_for_resource,
+            ResourceName=cluster_arn
+        ).get("TagList", [])
+
+    def fetch_cluster_details(cluster):
+        cluster_id = cluster['CacheClusterId']
+        cluster_arn = cluster['ARN']
+        tags = get_cluster_tags(cluster_arn)
+        tags_dict = {tag['Key']: tag['Value'] for tag in tags}
+        creation_time = cluster.get('CacheClusterCreateTime', None)
+        return {
+            'ClusterName': cluster_id,
+            'ClusterARN': cluster_arn,
+            'Engine': cluster['Engine'],
+            'NumOfCacheNodes': cluster['NumCacheNodes'],
+            'CacheNodeType': cluster['CacheNodeType'],
+            'CreationTime': creation_time.isoformat() if creation_time else None,
+            'Tags': tags_dict,
+            'VSAD': tags_dict.get('VSAD', 'Unknown')
+        }
+
+    def fetch_replication_group_shards():
+        replication_groups = exponential_backoff_retry(elasticache_client.describe_replication_groups).get("ReplicationGroups", [])
+        total_shards = sum(len(group["NodeGroups"]) for group in replication_groups)
+        return total_shards
+
+    clusters = []
+    paginator = elasticache_client.get_paginator("describe_cache_clusters")
+    for page in exponential_backoff_retry(paginator.paginate):
+        clusters.extend(page['CacheClusters'])
+
+    cluster_details = []
+    with ThreadPoolExecutor(max_workers=THREADS) as executor:
+        futures = [executor.submit(fetch_cluster_details, cluster) for cluster in clusters]
+        for future in as_completed(futures):
+            try:
+                cluster_details.append(future.result())
+            except Exception as e:
+                print(f"Error fetching cluster details: {e}")
+
+    total_shards = fetch_replication_group_shards()
+    total_nodes = sum(cluster['NumCacheNodes'] for cluster in clusters)
+
+    return {
+        'Clusters': cluster_details,
+        'Summary': {
+            'TotalShards': total_shards,
+            'TotalNodes': total_nodes
+        }
+    }
+
+@app.get("/elasticache")
+def get_elasticache(region: str, cluster_env: str):
+    """
+    API endpoint to fetch ElastiCache details.
+    """
+    try:
+        data = fetch_elasticache_clusters(region, cluster_env)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+
+
+from fastapi import FastAPI, HTTPException
 import boto3
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError
 import os
