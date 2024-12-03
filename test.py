@@ -1,3 +1,24 @@
+from collections import defaultdict
+
+def aggregate_by_vsad(cluster_details):
+    """
+    Aggregates cluster details at the VSAD level into a list of dictionaries.
+    """
+    vsad_info = defaultdict(lambda: {"Count": 0, "Instances": []})
+
+    for cluster in cluster_details:
+        vsad = cluster.get('VSAD', 'Unknown')
+        vsad_info[vsad]["Count"] += 1
+        vsad_info[vsad]["Instances"].append(cluster)
+
+    # Convert to list of dictionaries
+    vsad_list = [
+        {"vsad": vsad, "Count": details["Count"], "Instances": details["Instances"]}
+        for vsad, details in vsad_info.items()
+    ]
+    return vsad_list
+
+
 from fastapi import FastAPI, HTTPException
 from typing import Dict, Any
 import boto3
