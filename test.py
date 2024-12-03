@@ -1,3 +1,24 @@
+import asyncio
+
+async def fetch_cluster_tags_async(cluster_arn, elasticache_client):
+    async with semaphore:
+        for attempt in range(MAX_RETRIES):
+            try:
+                response = await asyncio.to_thread(
+                    elasticache_client.list_tags_for_resource, ResourceName=cluster_arn
+                )
+                tags = response.get("TagList", [])
+                return {tag["Key"]: tag["Value"] for tag in tags}
+            except Exception as e:
+                if "Throttling" in str(e) or "Rate exceeded" in str(e):
+                    await asyncio.sleep((2 ** attempt) + (time.time() % 1))
+                else:
+                    logging.error(f"Error fetching tags for {cluster_arn}: {e}")
+                    break
+        raise Exception(f"Max retries exceeded for {cluster_arn}")
+
+
+
 from collections import defaultdict
 
 def aggregate_by_vsad(cluster_details):
