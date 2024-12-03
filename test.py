@@ -1,3 +1,136 @@
+from fastapi import FastAPI, HTTPException
+import boto3
+import asyncio
+import logging
+from threading import Semaphore
+
+# Constants
+CONCURRENT_TAGS = 5  # Max concurrent tag fetches to avoid throttling
+MAX_RETRIES = 5  # Maximum retries for exponential backoff
+semaphore = Semaphore(CONCURRENT_TAGS)  # Semaphore to limit concurrency
+
+# Logging setup
+logging.basicConfig(level=logging.INFO)
+
+# Initialize FastAPI app
+app = FastAPI()
+
+# Async function to fetch tags for a cluster
+async def fetch_cluster_tags_async(cluster_arn, elasticache_client):
+    async with semaphore:
+        for attempt in range(MAX_RETRIES):
+            try:
+                response = await asyncio.to_thread(
+                    elasticache_client.list_tags_for_resource, ResourceName=cluster_arn
+                )
+                tags = response.get("TagList", [])
+                return {tag["Key"]: tag["Value"] for tag in tags}
+            except Exception as e:
+                if "Throttling" in str(e) or "Rate exceeded" in str(e):
+                    sleep_time = (2 ** attempt) + (time.time() % 1)
+                    logging.warning(f"Throttling error. Retrying in {sleep_time:.2f} seconds... (Attempt {attempt + 1})")
+                    await asyncio.sleep(sleep_time)
+                else:
+                    logging.error(f"Error fetching tags for {cluster_arn}: {e}")
+                    break
+        raise Exception(f"Max retries exceeded for {cluster_arn}")
+
+# Async function to fetch detailed cluster information
+async def fetch_cluster_details_async(cluster, elasticache_client):
+    try:
+        cluster_id = cluster.get("CacheClusterId")
+        cluster_arn = cluster.get("ARN")
+        if not cluster_id or not cluster_arn:
+            logging.warning(f"Skipping cluster with missing data: {cluster}")
+            return None
+
+        # Fetch cluster tags asynchronously
+        tags = await fetch_cluster_tags_async(cluster_arn, elasticache_client)
+
+        # Prepare cluster details
+        creation_time = cluster.get("CacheClusterCreateTime")
+        return {
+            "ClusterName": cluster_id,
+            "ClusterARN": cluster_arn,
+            "Engine": cluster.get("Engine"),
+            "NumOfCacheNodes": cluster.get("NumCacheNodes"),
+            "CacheNodeType": cluster.get("CacheNodeType"),
+            "CreationTime": creation_time.isoformat() if creation_time else None,
+            "Tags": tags,
+            "VSAD": tags.get("VSAD", "Unknown"),
+        }
+    except Exception as e:
+        logging.error(f"Error fetching details for cluster {cluster.get('CacheClusterId', 'Unknown')}: {e}")
+        return None
+
+# Async function to fetch all ElastiCache clusters
+async def get_elasticache_clusters_async(region):
+    """
+    Fetches details of all ElastiCache clusters in the specified region using asyncio.
+    """
+    session = boto3.Session()
+    aws_boto_config = boto3.session.Config(retries={"max_attempts": 10, "mode": "standard"})
+    elasticache_client = session.client("elasticache", config=aws_boto_config, region_name=region)
+
+    try:
+        # Fetch cluster list
+        clusters = []
+        paginator = elasticache_client.get_paginator("describe_cache_clusters")
+        for page in paginator.paginate():
+            clusters.extend(page["CacheClusters"])
+
+        # Fetch cluster details concurrently
+        tasks = [
+            fetch_cluster_details_async(cluster, elasticache_client) for cluster in clusters
+        ]
+        detailed_clusters = await asyncio.gather(*tasks)
+        return [cluster for cluster in detailed_clusters if cluster]
+    except Exception as e:
+        logging.error(f"Failed to get ElastiCache clusters: {e}")
+        return []
+
+# Aggregating results by VSAD level
+def aggregate_vsad_data(clusters):
+    """
+    Aggregates cluster information at the VSAD level.
+    """
+    vsad_data = {}
+    for cluster in clusters:
+        vsad = cluster["VSAD"]
+        if vsad not in vsad_data:
+            vsad_data[vsad] = {
+                "VSAD": vsad,
+                "Count": 0,
+                "Instances": [],
+            }
+        vsad_data[vsad]["Count"] += 1
+        vsad_data[vsad]["Instances"].append(cluster)
+
+    return list(vsad_data.values())
+
+# FastAPI endpoint to fetch ElastiCache clusters
+@app.get("/elasticache/clusters")
+async def get_clusters(region: str):
+    """
+    Endpoint to fetch ElastiCache clusters by region.
+    """
+    try:
+        clusters = await get_elasticache_clusters_async(region)
+        if not clusters:
+            raise HTTPException(status_code=404, detail="No clusters found")
+
+        vsad_summary = aggregate_vsad_data(clusters)
+        return vsad_summary
+    except Exception as e:
+        logging.error(f"Error fetching clusters: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch ElastiCache clusters")
+
+
+
+
+
+
+
 import asyncio
 
 async def fetch_cluster_tags_async(cluster_arn, elasticache_client):
