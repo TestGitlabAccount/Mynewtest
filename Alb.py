@@ -1,3 +1,29 @@
+import pandas as pd
+import json
+
+# Load JSON data from a file
+with open('data.json') as json_file:
+    json_data = json.load(json_file)
+
+# Convert JSON to a DataFrame
+# Handling nested JSON if the structure is like in the image
+data = []
+for key, value in json_data.items():
+    for item in value:
+        item['Category'] = key  # Add a category column if needed (e.g., "BGPV" or "GOUV")
+        data.append(item)
+
+df = pd.DataFrame(data)
+
+# Save DataFrame to CSV
+df.to_csv('output.csv', index=False)
+
+print("JSON data has been successfully converted to CSV.")
+
+
+
+
+
 aws cloudtrail lookup-events \
     --lookup-attributes AttributeKey=ResourceName,AttributeValue=<Instance-ID or IP> \
     --event-name TerminateInstances \
