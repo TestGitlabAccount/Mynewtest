@@ -8,7 +8,24 @@ aws ec2 describe-network-interfaces \
     --filters Name=addresses.private-ip-address,Values=<IP-Address> \
     --query 'NetworkInterfaces[].Attachment.InstanceId'
 
+import pandas as pd
+import json
 
+# Load JSON data from a file or string
+# Example with a JSON file:
+with open('data.json') as json_file:
+    json_data = json.load(json_file)
+
+# If JSON data is a string, use json.loads() instead:
+# json_data = json.loads('{"key": "value"}')
+
+# Convert JSON to a DataFrame
+df = pd.json_normalize(json_data)
+
+# Save DataFrame to Excel
+df.to_excel('output.xlsx', index=False, engine='openpyxl')
+
+print("JSON data has been successfully converted to Excel.")
 
 
 import boto3
