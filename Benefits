@@ -1,3 +1,9 @@
+def call(String vsad, String region) {
+    // Use HTML to add color
+    currentBuild.description = "<b style='color:blue;'>vsad:</b> <span style='color:green;'>${vsad}</span>, " +
+                               "<b style='color:blue;'>region:</b> <span style='color:green;'>${region}</span>"
+}
+
 Here’s an expanded version with additional advantages of using Kubernetes agents:
 
 Subject: Progress Update on Kubernetes Cloud Integration with CloudBees Jenkins
