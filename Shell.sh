@@ -32,5 +32,41 @@ for node_name in $(echo "$nodes" | jq -r '.nodes[].displayName'); do
         echo "Updated labels for $node_name: $updated_labels"
     else
         echo "Node $node_name is online. No action needed."
+
+
+
+
+
+
+
+
+
+        #!/bin/bash
+
+# Define the Kubernetes namespace and service name
+NAMESPACE="your-namespace"
+SERVICE="your-service-name"
+
+# Get the healthcheck path from the service annotations
+HEALTHCHECK_PATH=$(kubectl get svc "$SERVICE" -n "$NAMESPACE" -o jsonpath='{.metadata.annotations.alb\.ingress\.kubernetes\.io/healthcheck-path}')
+
+# Validate if the healthcheck path was retrieved
+if [ -z "$HEALTHCHECK_PATH" ]; then
+    echo "Healthcheck path not found for service: $SERVICE in namespace: $NAMESPACE"
+    exit 1
+fi
+
+# Extract the service name from the healthcheck path
+SERVICENAME=$(echo "$HEALTHCHECK_PATH" | awk -F'/' '{print $(NF-2)}')
+
+# Construct the full URL
+BASE_URL="https://www.ggg.com/nssv/nstrw"
+FULL_URL="$BASE_URL/$HEALTHCHECK_PATH"
+
+# Check the URL status
+STATUS=$(curl -o /dev/null -s -w "%{http_code}" "$FULL_URL")
+
+# Print the result
+echo "$FULL_URL -- $STATUS"
     fi
 done
