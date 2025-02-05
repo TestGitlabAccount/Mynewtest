@@ -1,3 +1,12 @@
+- name: Extract file paths with yyyymmdd format from ps -aef output
+  shell: ps -aef | grep "Monitoring" | grep -oE '/pos/prod/Log/[^\s]+TBL_LKU[^\s]*\d{8}[^\s]*'
+  register: ps_output
+
+- name: Display extracted file paths
+  debug:
+    msg: "{{ ps_output.stdout_lines }}"
+
+
 import pandas as pd
 import json
 
