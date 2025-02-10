@@ -1,3 +1,57 @@
+def generateNginxConfig(proxyValues) {
+    def nginxConfig = """
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: default
+data:
+  nginx.conf: |
+    http {
+        server {
+            listen 80;
+"""
+
+    // Define exact path-to-origin mapping
+    def specialPaths = [
+        "/digital/nsa/nos/ui/payment"    : "chatbot-exp.verizon.com",
+        "/Mobile/nsa/nos/ui/webpunchout" : "www.verizon.com",
+        "/soe/digital/prospect/"         : "secure.verizon.com"
+    ]
+
+    proxyValues.each { color, paths ->
+        paths.each { pathEntry ->
+            def path = pathEntry.path
+            def proxyPass = pathEntry.url
+
+            nginxConfig += """
+            location ${path} {
+                proxy_pass ${proxyPass};
+"""
+
+            // Check for an exact match in specialPaths
+            if (specialPaths.containsKey(path)) {
+                def origin = specialPaths[path]
+                nginxConfig += """
+                if (\$request_method = 'OPTIONS') {
+                    add_header 'Access-Control-Allow-Origin' '${origin}';
+                    add_header 'Access-Control-Allow-Credentials' 'true';
+                    add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS';
+                    add_header 'Access-Control-Allow-Headers' 'DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type';
+                }
+"""
+            }
+
+            nginxConfig += "            }\n"
+        }
+    }
+
+    nginxConfig += "        }\n    }\n"
+    return nginxConfig
+}
+
+
+
 def generateIngressYaml(values, subenv) {
     def ingress = """
 apiVersion: networking.k8s.io/v1
