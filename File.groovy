@@ -1,3 +1,13 @@
+aws cloudwatch get-metric-statistics \
+    --namespace "Kafka" \
+    --metric-name "cpuidle" \
+    --start-time $(date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%SZ) \
+    --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
+    --period 60 \
+    --statistics Average \
+    --output json
+
+
 pipeline {
     agent any
 
