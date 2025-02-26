@@ -1,3 +1,68 @@
+import requests
+import time
+import base64
+
+# API Credentials
+username_password = "your_username:your_password"
+encoded_auth = base64.b64encode(username_password.encode()).decode()
+
+# Headers
+headers = {
+    "accept": "application/json",
+    "Auth": f"Basic {encoded_auth}",
+    "Content-Type": "application/json"
+}
+
+# API Endpoint for Encryption Request
+url_put = "https://ansibleplus.verizon.com/aws/ec2/wls-np/images/encrypt?vsad=IZIV"
+data = {
+    "amiLabel": "Red Hat Enterprise Linux 8 (Latest)",
+    "amiTags": "Key1=Value1\nKey2=Value2",
+    "UserId": "string"
+}
+
+# Step 1: Send PUT Request to Encrypt Image
+response = requests.put(url_put, json=data, headers=headers)
+if response.status_code != 200:
+    print(f"Error: {response.text}")
+    exit()
+
+audit_id = response.json().get("AuditID")
+print(f"Audit ID: {audit_id}")
+
+# Step 2: Poll the GET API Every 2 Minutes Until Completed
+url_get = f"https://ansibleplus.verizon.com/app/play/{audit_id}/results?vsad=IZIV&withLogs=false"
+
+while True:
+    get_response = requests.get(url_get, headers=headers)
+    if get_response.status_code != 200:
+        print(f"Error: {get_response.text}")
+        exit()
+    
+    result = get_response.json()
+    
+    if result.get("status") == "COMPLETED":
+        break
+    
+    print("Waiting for completion...")
+    time.sleep(120)  # Wait for 2 minutes
+
+# Step 3: Extract and Print NONPROD AMIs
+nonprod = result.get("outputs", {}).get("NONPROD", {})
+us_east_1_ami = nonprod.get("us-east-1")
+us_west_2_ami = nonprod.get("us-west-2")
+
+print(f"NONPROD us-east-1 AMI: {us_east_1_ami}")
+print(f"NONPROD us-west-2 AMI: {us_west_2_ami}")
+
+
+
+
+
+
+
+
+
 import boto3
 from datetime import datetime, timedelta
 
