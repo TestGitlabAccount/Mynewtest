@@ -453,3 +453,84 @@ def get_elasticache_clusters(region, cluster_env):
     except Exception as ex:
         logging.error(f'Failed to get_elasticache_clusters: {ex}')
         raise ex
+
+
+
+
+
+
+import requests
+import os
+import json
+from datetime import datetime, timedelta
+import pytz
+
+# Set your New Relic API key
+NEW_RELIC_API_KEY = os.getenv("NEW_RELIC_API_KEY")
+
+# List of services to monitor
+SERVICES = ["service-a", "service-b", "service-c"]
+
+# Define EST timezone
+EST = pytz.timezone("US/Eastern")
+
+def get_tpm_for_service(service, region):
+    """Fetch TPM from New Relic for a given service in the last 3 days (9 AM - 8 PM EST)."""
+    url = "https://api.newrelic.com/v2/query"
+    headers = {"Api-Key": NEW_RELIC_API_KEY, "Content-Type": "application/json"}
+    
+    total_tpm = []
+
+    for days_ago in range(1, 4):  # Last 3 days
+        start_time = datetime.now(EST) - timedelta(days=days_ago)
+        start_time = start_time.replace(hour=9, minute=0, second=0, microsecond=0)
+        end_time = start_time.replace(hour=20, minute=0, second=0, microsecond=0)
+
+        # Convert to UTC for NRQL query
+        start_utc = start_time.astimezone(pytz.utc).strftime('%Y-%m-%d %H:%M:%S')
+        end_utc = end_time.astimezone(pytz.utc).strftime('%Y-%m-%d %H:%M:%S')
+
+        # NRQL query to fetch TPM
+        query = f"""
+        SELECT count(*) FROM Transaction 
+        WHERE appName='{service}' AND region='{region}'
+        SINCE '{start_utc}' UNTIL '{end_utc}' 
+        FACET hourOf(timestamp) TIMESERIES 1 minute
+        """
+
+        response = requests.post(url, headers=headers, json={"nrql": query})
+        data = response.json()
+
+        if "results" in data:
+            tpm_values = [entry["count"] for entry in data["facets"]]
+            if tpm_values:
+                avg_tpm = sum(tpm_values) // len(tpm_values)
+                total_tpm.append(avg_tpm)
+
+    return sum(total_tpm) // len(total_tpm) if total_tpm else 0
+
+def get_tpm_for_all_services(cluster_name, region, cluster_env):
+    """Fetch and return average TPM for all services."""
+    
+    result = {
+        "cluster_name": cluster_name,
+        "region": region,
+        "cluster_env": cluster_env,
+        "services": {}
+    }
+    
+    for service in SERVICES:
+        avg_tpm = get_tpm_for_service(service, region)
+        result["services"][service] = {"avg_tpm": avg_tpm}
+
+    return result
+
+# Example usage
+if __name__ == "__main__":
+    cluster_name = "eks-cluster-1"
+    region = "us-east-1"
+    cluster_env = "prod"
+    
+    tpm_data = get_tpm_for_all_services(cluster_name, region, cluster_env)
+    
+    print(json.dumps(tpm_data, indent=4))
