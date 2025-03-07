@@ -1,3 +1,94 @@
+import requests
+import datetime
+
+# New Relic API details (Replace with actual values)
+NEW_RELIC_API_KEY = "NRAK-XXXXX"  # Replace with your actual API Key
+NEW_RELIC_ACCOUNT_ID = "3136946"   # Replace with your Account ID
+
+# NerdGraph API URL
+NERDGRAPH_URL = "https://api.newrelic.com/graphql"
+
+# List of services to fetch TPM values for
+SERVICES = ["deviceinventory-domain", "orders", "billing"]  # Update with actual service names
+
+# Cluster and Environment Details
+VSAD = "EV6V"  # Example VSAD
+REGION = "us-east-1"
+ENVIRONMENT = "EKSE" if REGION == "us-east-1" else "EKSW"
+
+# Headers
+HEADERS = {
+    "X-Api-Key": NEW_RELIC_API_KEY,
+    "Content-Type": "application/json"
+}
+
+# Function to get TPM values for the past 3 days
+def fetch_tpm():
+    final_results = {}
+
+    for service in SERVICES:
+        service_name = f"{VSAD}-{service}-prod-{ENVIRONMENT}"
+        tpm_values = []
+
+        for i in range(3):
+            day = (datetime.datetime.now() - datetime.timedelta(days=i)).strftime("%Y-%m-%d")
+            start_time = f"{day}T09:00:00-05:00"  # 9 AM EST
+            end_time = f"{day}T20:00:00-05:00"  # 8 PM EST
+
+            # NRQL Query
+            NRQL_QUERY = f"""
+            SELECT rate(count(*), 1 minute) FROM Transaction 
+            WHERE appName = '{service_name}' 
+            AND request.uri NOT LIKE '%actuator%' 
+            AND transactionType='Web' 
+            SINCE '{start_time}' UNTIL '{end_time}' 
+            EXTRAPOLATE
+            """
+
+            # GraphQL Query
+            graphql_query = {
+                "query": f"""
+                {{
+                    actor {{
+                        account(id: {NEW_RELIC_ACCOUNT_ID}) {{
+                            nrql(query: "{NRQL_QUERY}") {{
+                                results
+                            }}
+                        }}
+                    }}
+                }}
+                """
+            }
+
+            # Execute the API request
+            response = requests.post(NERDGRAPH_URL, json=graphql_query, headers=HEADERS)
+
+            if response.status_code == 200:
+                data = response.json()
+                results = data.get("data", {}).get("actor", {}).get("account", {}).get("nrql", {}).get("results", [])
+                
+                if results:
+                    tpm_value = sum(item.get("rate.count", 0) for item in results) / len(results)
+                else:
+                    tpm_value = 0
+                
+                tpm_values.append(tpm_value)
+            else:
+                print(f"Error fetching TPM for {service_name}: {response.status_code}, {response.text}")
+                tpm_values.append(0)
+
+        # Calculate average TPM
+        avg_tpm = sum(tpm_values) / len(tpm_values) if tpm_values else 0
+        final_results[service_name] = avg_tpm
+
+    return final_results
+
+# Run the function and print results
+tpm_data = fetch_tpm()
+print("Average TPM Values:", tpm_data)
+
+
+
 import pandas as pd
 import json
 
