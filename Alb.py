@@ -1,3 +1,26 @@
+import json
+
+# Load old and new metrics JSON files
+with open("old_metrics.json") as old_file, open("new_metrics.json") as new_file:
+    old_metrics = json.load(old_file)  # Assuming a list of metric names
+    new_metrics = json.load(new_file)
+
+# Convert lists to sets for comparison
+old_metrics_set = set(old_metrics)
+new_metrics_set = set(new_metrics)
+
+# Find missing metrics
+missing_metrics = old_metrics_set - new_metrics_set
+
+# Output results
+print("Missing Metrics:", missing_metrics)
+
+# Save missing metrics to a file
+with open("missing_metrics.json", "w") as outfile:
+    json.dump(list(missing_metrics), outfile, indent=4)
+
+
+
 import requests
 import json
 import datetime
