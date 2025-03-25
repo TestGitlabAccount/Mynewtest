@@ -35,3 +35,36 @@ spec:
         host: nginx
         port:
           number: 80
+
+
+
+
+
+
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: service-a
+spec:
+  hosts:
+    - service-a.default.svc.cluster.local
+  http:
+    - route:
+        - destination:
+            host: service-a
+      retries:
+        attempts: 3
+        perTryTimeout: 2s
+        retryOn: "5xx"
+    - match:
+        - uri:
+            prefix: /
+      route:
+        - destination:
+            host: service-b.default.svc.cluster.local
+            port:
+              number: 80
+          headers:
+            request:
+              set:
+                :path: /api/serviceb-endpoint  # Forward request to ServiceB API
