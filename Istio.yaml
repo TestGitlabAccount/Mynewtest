@@ -1,3 +1,50 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: health-failover
+  namespace: B6vv
+spec:
+  hosts:
+  - "location-management.B6vv.svc.cluster.local"  # Target the location service
+  gateways:
+  - mesh
+  http:
+  - match:
+    - uri:
+        exact: /actuator/health
+    # Primary route to location-management
+    route:
+    - destination:
+        host: location-management.B6vv.svc.cluster.local
+        port:
+          number: 8080
+    # Circuit breaker settings (via DestinationRule)
+    retries:
+      attempts: 1
+      retryOn: 5xx,gateway-error
+    # Fallback to mobile-phone-management with path rewrite
+    fault:
+      abort:
+        percentage:
+          value: 100
+        httpStatus: 503  # Simulate failure for testing
+  # Fallback route when the primary fails
+  - match:
+    - uri:
+        exact: /actuator/health
+      headers:
+        x-envoy-failed: "true"  # Triggered after retries fail
+    route:
+    - destination:
+        host: mobile-phone-management.B6vv.svc.cluster.local
+        port:
+          number: 8080
+      rewrite:
+        uri: /specific/health  # Rewrite path for mobile service
+
+
+
+
 apiVersion: networking.istio.io/v1beta1
 kind: Gateway
 metadata:
