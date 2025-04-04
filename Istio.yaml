@@ -1,6 +1,34 @@
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
 metadata:
+  name: service-a
+spec:
+  hosts:
+    - service-a.default.svc.cluster.local
+  http:
+    - route:
+        - destination:
+            host: service-a.default.svc.cluster.local
+            weight: 100
+      retries:
+        attempts: 3
+        perTryTimeout: 2s
+      timeout: 5s
+      fault:
+        abort:
+          httpStatus: 500
+          percentage:
+            value: 5  # Simulate 5% failure
+      mirror:
+        host: service-b.default.svc.cluster.local  # Fallback to Service B
+        percentage: 100  # Send all requests to Service B if Service A is down
+
+
+
+
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
   name: health-failover
   namespace: B6vv
 spec:
