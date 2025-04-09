@@ -1,3 +1,15 @@
+aws cloudwatch get-metric-statistics \
+  --namespace AWS/ES \
+  --metric-name CPUUtilization \
+  --dimensions Name=DomainName,Value=vz-b6pv-onevzcxp-mtas-v1-nsa \
+  --statistics Average \
+  --start-time $(date -u -d '-1 day' +%Y-%m-%dT%H:%M:%SZ) \
+  --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
+  --period 300 \
+  --region us-east-1
+
+
+
 import requests
 import datetime
 
