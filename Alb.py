@@ -1,86 +1,63 @@
-import json
+import boto3
+from botocore.exceptions import ClientError, BotoCoreError
 
-# Load old and new metrics JSON files
-with open("old_metrics.json") as old_file, open("new_metrics.json") as new_file:
-    old_metrics = json.load(old_file)  # Assuming a list of metric names
-    new_metrics = json.load(new_file)
+def delete_ebs_volumes(volume_ids: list):
+    ec2 = boto3.client('ec2')
+    results = {}
 
-# Convert lists to sets for comparison
-old_metrics_set = set(old_metrics)
-new_metrics_set = set(new_metrics)
+    for vol_id in volume_ids:
+        try:
+            ec2.delete_volume(VolumeId=vol_id)
+            results[vol_id] = {"status": "success", "message": "Volume deleted successfully"}
+        except ClientError as e:
+            results[vol_id] = {
+                "status": "failed",
+                "message": e.response['Error']['Message'],
+                "code": e.response['Error']['Code']
+            }
+        except BotoCoreError as e:
+            results[vol_id] = {
+                "status": "failed",
+                "message": str(e),
+                "code": "BotoCoreError"
+            }
+        except Exception as e:
+            results[vol_id] = {
+                "status": "failed",
+                "message": str(e),
+                "code": "UnknownError"
+            }
+    return results
 
-# Find missing metrics
-missing_metrics = old_metrics_set - new_metrics_set
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from typing import List
+from aws.aws_methods import delete_ebs_volumes
 
-# Output results
-print("Missing Metrics:", missing_metrics)
+app = FastAPI()
 
-# Save missing metrics to a file
-with open("missing_metrics.json", "w") as outfile:
-    json.dump(list(missing_metrics), outfile, indent=4)
+class VolumeDeleteRequest(BaseModel):
+    volume_ids: List[str]
 
-
-
-import requests
-import json
-import datetime
-import numpy as np  # For calculating the 90th percentile
-import pytz
-import logging
-
-# Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-
-# Constants (replace these with your actual values)
-API_KEY = "YOUR_NEW_RELIC_API_KEY"
-ACCOUNT_ID = "YOUR_ACCOUNT_ID"
-CLUSTER_NAME = "abc"
-REGION = "east"
-NAMESPACE = "xyz"
-
-# Function to get the last 4 business days (Monday-Friday only)
-def get_past_business_days(days=4):
+@app.post("/delete_volumes")
+def delete_volumes(request: VolumeDeleteRequest):
+    if not request.volume_ids:
+        raise HTTPException(status_code=400, detail="No volume IDs provided")
+    
     try:
-        dates = []
-        current = datetime.date.today()
-        while len(dates) < days:
-            current -= datetime.timedelta(days=1)
-            if current.weekday() < 5:  # 0=Monday, 6=Sunday
-                dates.append(current.strftime("%Y-%m-%d"))
-        return dates
+        result = delete_ebs_volumes(request.volume_ids)
+        return {
+            "requested_volumes": request.volume_ids,
+            "results": result
+        }
     except Exception as e:
-        logging.error("Error getting past business days: %s", e)
-        return []
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
-# Convert a given EST date’s business hours (9:00 to 20:00 EST) to UTC timestamps.
-def convert_est_to_utc_business_hours(date_str):
-    try:
-        est = pytz.timezone('America/New_York')
-        utc = pytz.utc
-        # Define business hours in EST for the given date
-        est_start = datetime.datetime.strptime(date_str + " 09:00:00", "%Y-%m-%d %H:%M:%S")
-        est_end = datetime.datetime.strptime(date_str + " 20:00:00", "%Y-%m-%d %H:%M:%S")
-        est_start = est.localize(est_start)
-        est_end = est.localize(est_end)
-        # Convert to UTC
-        utc_start = est_start.astimezone(utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-        utc_end = est_end.astimezone(utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-        return utc_start, utc_end
-    except Exception as e:
-        logging.error("Error converting EST to UTC for date %s: %s", date_str, e)
-        return None, None
 
-# Example function to retrieve the list of deployments.
-# Replace this with your actual deployment-fetching logic.
-def list_namespace_deployments(namespace):
-    try:
-        return ["service1", "service2", "service3"]
-    except Exception as e:
-        logging.error("Error listing deployments for namespace %s: %s", namespace, e)
-        return []
 
-# Get the past 4 business days.
-past_days = get_past_business_days()
+
+
+ess_days()
 
 # Initialize our results JSON structure.
 tpm_data = {
