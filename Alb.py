@@ -2,6 +2,106 @@ import boto3
 from botocore.exceptions import ClientError, BotoCoreError
 
 
+
+import boto3
+import time
+import random
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from botocore.exceptions import ClientError
+
+MAX_WORKERS = 5  # Keep this low to avoid throttling
+RETRY_LIMIT = 5
+
+def describe_target_health_with_backoff(client, tg_arn):
+    retry = 0
+    while retry < RETRY_LIMIT:
+        try:
+            return client.describe_target_health(TargetGroupArn=tg_arn)
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'Throttling':
+                wait_time = 2 ** retry + random.uniform(0, 1)
+                time.sleep(wait_time)
+                retry += 1
+            else:
+                raise e
+    raise Exception(f"Max retries exceeded for {tg_arn}")
+
+def get_target_groups_with_many_ports(region_name: str, port_threshold: int = 5):
+    elbv2 = boto3.client('elbv2', region_name=region_name)
+
+    paginator = elbv2.get_paginator('describe_target_groups')
+    response_iterator = paginator.paginate()
+
+    all_target_groups = []
+
+    for page in response_iterator:
+        for tg in page['TargetGroups']:
+            if tg.get('TargetType') == 'instance':
+                all_target_groups.append({
+                    'TargetGroupArn': tg['TargetGroupArn'],
+                    'TargetGroupName': tg['TargetGroupName']
+                })
+
+    results = []
+
+    def process_target_group(tg):
+        tg_arn = tg['TargetGroupArn']
+        tg_name = tg['TargetGroupName']
+        try:
+            health_response = describe_target_health_with_backoff(elbv2, tg_arn)
+            instance_ports_map = {}
+
+            for description in health_response['TargetHealthDescriptions']:
+                target = description['Target']
+                instance_id = target.get('Id')
+                port = target.get('Port')
+
+                if instance_id not in instance_ports_map:
+                    instance_ports_map[instance_id] = set()
+                instance_ports_map[instance_id].add(port)
+
+            group_results = []
+            for instance_id, ports in instance_ports_map.items():
+                if len(ports) >= port_threshold:
+                    group_results.append({
+                        "target_group_name": tg_name,
+                        "region": region_name,
+                        "instance_id": instance_id,
+                        "num_ports": len(ports),
+                        "ports": sorted(list(ports))
+                    })
+            return group_results
+        except Exception as e:
+            # Optional: log error
+            return []
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        future_to_tg = {executor.submit(process_target_group, tg): tg for tg in all_target_groups}
+        for future in as_completed(future_to_tg):
+            result = future.result()
+            if result:
+                results.extend(result)
+
+    return results
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import boto3
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
