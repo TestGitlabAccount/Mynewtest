@@ -1,6 +1,87 @@
 import boto3
 from botocore.exceptions import ClientError, BotoCoreError
 
+
+
+import boto3
+
+def get_target_groups_with_many_ports(region_name: str, port_threshold: int = 5):
+    elbv2 = boto3.client('elbv2', region_name=region_name)
+    ec2 = boto3.client('ec2', region_name=region_name)
+
+    paginator = elbv2.get_paginator('describe_target_groups')
+    response_iterator = paginator.paginate()
+
+    results = []
+
+    for page in response_iterator:
+        for tg in page['TargetGroups']:
+            tg_arn = tg['TargetGroupArn']
+            tg_name = tg['TargetGroupName']
+            target_type = tg.get('TargetType')
+
+            if target_type != 'instance':
+                continue
+
+            health_response = elbv2.describe_target_health(TargetGroupArn=tg_arn)
+
+            instance_ports_map = {}
+            for description in health_response['TargetHealthDescriptions']:
+                target = description['Target']
+                instance_id = target.get('Id')
+                port = target.get('Port')
+
+                if instance_id not in instance_ports_map:
+                    instance_ports_map[instance_id] = set()
+                instance_ports_map[instance_id].add(port)
+
+            for instance_id, ports in instance_ports_map.items():
+                if len(ports) >= port_threshold:
+                    results.append({
+                        "target_group_name": tg_name,
+                        "region": region_name,
+                        "instance_id": instance_id,
+                        "num_ports": len(ports),
+                        "ports": sorted(list(ports))
+                    })
+
+    return results
+
+
+
+
+
+
+
+from fastapi import FastAPI, Query
+from typing import List
+from aws_elb import get_target_groups_with_many_ports
+
+app = FastAPI()
+
+@app.get("/target-groups", summary="Get target groups with >=5 ports per instance")
+def list_target_groups(
+    region: str = Query(..., description="AWS region name"),
+    port_threshold: int = Query(5, ge=1, description="Minimum number of ports to filter by")
+) -> List[dict]:
+    """
+    Returns a list of target groups with instance-type targets that have 5 or more ports.
+    """
+    try:
+        results = get_target_groups_with_many_ports(region, port_threshold)
+        return results
+    except Exception as e:
+        return {"error": str(e)}
+
+
+
+
+
+
+
+
+
+
 def delete_ebs_volumes(volume_ids: list):
     ec2 = boto3.client('ec2')
     results = {}
