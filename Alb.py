@@ -1,4 +1,23 @@
-import boto3
+VZW-MFA:
+  - contextpath: /ev6v/prod/billing
+    ratelimit: 1.69
+  - contextpath: /ev6v/prod/customerprofile
+    ratelimit: 3.83
+
+OMNI-RETAIL-TAB:
+  - contextpath: /ev6v/prod/shopping
+    ratelimit: 0.33
+  - contextpath: /ev6v/prod/browsing
+    ratelimit: 0.29
+
+VZW-MFA-ANDROID:
+  - contextpath: /ev6v/prod/nbx
+    ratelimit: 0.26
+
+
+
+
+
 from botocore.exceptions import ClientError, BotoCoreError
 
 
