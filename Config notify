@@ -1,61 +1,403 @@
-<!-- Radio Button Toggle -->
-<div class="mb-3">
-  <label>
-    <input type="radio" [(ngModel)]="notificationTypeId" [value]="1" /> 
-    Based on Deloitte Start Date & First Login Date
-  </label>
-  <div *ngIf="notificationTypeId == 1" class="pl-4 pt-2">
-    <label>When should the email be sent to the user: *</label>
-    <div style="display: flex; gap: 8px; align-items: center;">
-      <select [(ngModel)]="triggerDate">
-        <option value="">Select your trigger Date</option>
-        <option value="startDate">Start Date</option>
-        <option value="loginDate">First Login Date</option>
-      </select>
+<div class="row">
+  <div class="col-md-12 item-row row-bottom p-0">
+    <div class="col-md-6 item-column">
+      <label>
+        <input type="radio" [value]="'1'" name="workflowOption" [(ngModel)]="selectedWorkFlowOption" />
+        Based on Deloitte Start Date & First Login Date
+      </label>
+    </div>
 
-      <select [(ngModel)]="dayOperator">
-        <option value="+">+</option>
-        <option value="-">-</option>
-      </select>
+    <div *ngIf="selectedWorkFlowOption === '1'" class="col-md-12 card-date p-0">
+      <label class="workflow-label">{{workflowHeader}}<span class="mark-red">*</span></label>
+      <div class="row">
+        <div class="col-md-3">
+          <d-select
+            [selectedValue]="selectedAvailableDate"
+            [options]="notificationBaseDates"
+            [mapping]="{ id: 'cardBaseDateId', text: 'cardBaseDateDescription' }"
+            [ellipsis]="50"
+            (changeOption)="availableBaseDateSelected($event)">
+          </d-select>
+        </div>
 
-      <input type="number" [(ngModel)]="days" placeholder="days" min="0" />
-      <span>days</span>
+        <div class="col-md-1 text-center symbol-box">+</div>
+
+        <div class="col-md-2">
+          <d-select
+            [selectedValue]="isEnable ? addMinusDropdown[0] : null"
+            [options]="addMinusDropdown"
+            [mapping]="{ id: 'Id', text: 'Description' }"
+            [ellipsis]="50"
+            [ngClass]="isEnable ? '' : 'div-disable'"
+            (changeOption)="availableBaseDateRangeSelected($event)">
+          </d-select>
+        </div>
+
+        <div class="col-md-2">
+          <input
+            type="text"
+            class="field-text"
+            placeholder="days"
+            maxlength="2"
+            [(ngModel)]="notifObj.notificationInfo.availableDateDuration"
+            [disabled]="!isEnable"
+            (keyup)="onKeyUp($event)"
+            (keypress)="keyPressNumbers($event)" />
+        </div>
+
+        <div class="col-md-1 days-label">days</div>
+      </div>
     </div>
   </div>
 </div>
 
-<!-- Second Option -->
-<div class="mb-3">
-  <label>
-    <input type="radio" [(ngModel)]="notificationTypeId" [value]="2" /> 
-    Based on Start Date and End Date
-  </label>
-  <div *ngIf="notificationTypeId == 2" class="pl-4 pt-2">
-    <label><strong>Choose the start and end dates for sending this email: *</strong></label>
-    <p class="text-muted">Email would be sent once during the selected date range.</p>
-    
-    <div style="display: flex; gap: 16px;">
-      <div>
-        <label>Start Date</label><br />
-        <input type="date" [(ngModel)]="startDate" />
-      </div>
-      <div>
-        <label>End Date</label><br />
-        <input type="date" [(ngModel)]="endDate" />
-      </div>
-    </div>
-  </div>
-</div>
 
 
 
 
 
 
+import { Component, OnInit } from '@angular/core';
+import { NotificationType } from 'src/app/shared/enums/notification-type.enum';
+import { CardBaseDate } from 'src/app/shared/models/card-base-date';
+import { NotificationRequest } from 'src/app/shared/models/notification-info';
+import { AppConstants } from 'src/app/shared/constants/app-constants';
+import { DataPassingService } from 'src/app/shared/Services/data-passing.service';
+import { AdminBirdsEyeViewService } from 'src/app/shared/Services/birds-eye-view.service';
 
-notificationTypeId = 1; // default
-triggerDate = '';
-dayOperator = '+';
-days = 0;
-startDate = '';
-endDate = '';
+@Component({
+  selector: 'app-config-workflow',
+  templateUrl: './config-workflow.component.html',
+  styleUrls: ['./config-workflow.component.less']
+})
+export class ConfigWorkflowComponent implements OnInit {
+
+  public notificationBaseDates: any[] = [];
+  public selectedAvailableDate: CardBaseDate;
+  public addMinusDropdown: any[] = [];
+  public selectedAvailableDateRange: any;
+  public notifObj: any = {
+    notificationInfo: {
+      availableDateDuration: ''
+    }
+  };
+  public workflowHeader = '';
+  public isEnable: boolean = false;
+  public selectedWorkFlowOption: string = '1';
+
+  constructor(
+    private dataPassingService: DataPassingService,
+    private adminBirdsEyeViewService: AdminBirdsEyeViewService
+  ) {}
+
+  async ngOnInit(): Promise<void> {
+    this.selectedAvailableDate = { cardBaseDateId: 0, cardBaseDateDescription: 'Select your trigger Date' };
+    this.addMinusDropdown = [
+      { Id: 1, Description: '+' },
+      { Id: 2, Description: '-' }
+    ];
+
+    if (this.dataPassingService.getNotificationData()) {
+      this.notifObj = this.dataPassingService.getNotificationData();
+    }
+
+    switch (this.notifObj.notificationInfo.notificationTypeId) {
+      case NotificationType.Email:
+        this.workflowHeader = AppConstants.EmailWorkFlowHeader;
+        break;
+      case NotificationType.Bell:
+        this.workflowHeader = AppConstants.BellWorkFlowHeader;
+        break;
+      case NotificationType.Banner:
+        this.workflowHeader = AppConstants.BannerWorkFlowHeader;
+        break;
+      default:
+        break;
+    }
+
+    await this.getNotificationBaseDates();
+    this.setNotifObjData();
+  }
+
+  async getNotificationBaseDates(): Promise<void> {
+    // Your service logic to fetch notificationBaseDates
+  }
+
+  setNotifObjData() {
+    this.selectedAvailableDateRange = this.addMinusDropdown[0];
+
+    if (this.notifObj.notificationInfo.availableDateSign != null) {
+      const filterData = this.addMinusDropdown.filter(
+        (data: any) => data.Description === this.notifObj.notificationInfo.availableDateSign
+      );
+      if (filterData.length > 0) {
+        this.selectedAvailableDateRange = filterData[0];
+      }
+    }
+
+    if (this.notifObj.notificationInfo.notificationBaseDateId != null) {
+      const filterData = this.notificationBaseDates.filter(
+        (date: any) => date.cardBaseDateId === this.notifObj.notificationInfo.notificationBaseDateId
+      );
+      if (filterData.length > 0) {
+        this.selectedAvailableDate = filterData[0];
+      }
+    }
+
+    if (this.selectedAvailableDate.cardBaseDateId !== 0) {
+      this.isEnable = true;
+    }
+  }
+
+  availableBaseDateSelected(event: any) {
+    const baseDate: CardBaseDate = event;
+    this.selectedAvailableDate = baseDate;
+    this.notifObj.notificationInfo.notificationBaseDateId = baseDate.cardBaseDateId;
+
+    if (baseDate.cardBaseDateId !== 0) {
+      this.availableBaseDateRangeSelected(this.addMinusDropdown[0]);
+      this.isEnable = true;
+    } else {
+      this.isEnable = false;
+    }
+    this.publishNotification();
+  }
+
+  availableBaseDateRangeSelected(addMinus: any) {
+    this.selectedAvailableDateRange = addMinus;
+    this.notifObj.notificationInfo.availableDateSign = this.selectedAvailableDateRange.Description;
+    this.publishNotification();
+  }
+
+  onKeyUp(event: any) {
+    const input = event.target as HTMLInputElement;
+    input.value = input.value == null ? '' : input.value.trimLeft();
+    this.publishNotification();
+  }
+
+  keyPressNumbers(event: any) {
+    const charCode = event.which ? event.which : event.keyCode;
+    if (charCode < 48 || charCode > 57) {
+      event.preventDefault();
+      return false;
+    }
+    return true;
+  }
+
+  publishNotification() {
+    this.dataPassingService.publishNotificationData(this.notifObj);
+  }
+}
+
+
+
+
+
+.container {
+  display: flex;
+  flex-direction: column;
+  margin-left: 10px;
+}
+
+.row {
+  margin-top: 1rem;
+  display: flex;
+}
+
+.header-label {
+  font-family: OpenSans;
+  font-size: 16px;
+  color: #000000;
+  line-height: 24px;
+  margin-bottom: 15px;
+}
+
+.row-bottom {
+  margin-bottom: 15px;
+}
+
+.item-row {
+  margin-top: 0;
+  display: flex;
+}
+
+.item-column {
+  padding-left: 0;
+}
+
+label {
+  font-family: OpenSans-Semibold;
+  font-size: 13px;
+  color: #000000;
+  line-height: 20px;
+}
+
+.mark-red {
+  color: red;
+  margin-left: 5px;
+}
+
+.sub-title-label {
+  font-family: OpenSans-Light !important;
+}
+
+.limit-text {
+  float: right;
+}
+
+label {
+  width: 100%;
+  display: flow-root;
+  color: #B0B0CE;
+  font-family: OpenSans;
+  font-size: 13px;
+  text-align: right;
+  line-height: 16px;
+}
+
+:focus {
+  outline: none;
+}
+
+.chk-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  font-family: OpenSans !important;
+}
+
+.radio-space {
+  width: 9rem;
+}
+
+.input-content {
+  display: flex !important;
+  align-items: center;
+  position: relative;
+  font-family: OpenSans;
+  font-size: 13px;
+  color: #000000;
+  line-height: 20px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+input {
+  opacity: 0;
+  position: absolute;
+  left: 0;
+  width: 14px;
+  height: 14px;
+  z-index: 9999;
+}
+
+input:not([disabled]) {
+  cursor: pointer;
+}
+
+.checkmark {
+  order: -1;
+  height: 14px;
+  width: 14px;
+  background-color: #ffffff;
+  border: 1px solid #989595;
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+input:not([disabled]):hover ~ .checkmark {
+  border: 1px solid #003ae0;
+}
+
+input:checked ~ .checkmark {
+  background-color: #2196F3 !important;
+}
+
+.checkmark:after {
+  content: '';
+  position: absolute;
+  display: none;
+}
+
+input:checked ~ .checkmark:after {
+  display: block;
+}
+
+.checkmark:after {
+  width: 4px;
+  height: 8px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+input[type='checkbox']:disabled ~ .checkmark {
+  background-color: #dddddd;
+  cursor: not-allowed !important;
+}
+
+input[type='radio']:disabled ~ .checkmark {
+  background-color: #dddddd;
+  opacity: 0.5;
+  cursor: not-allowed !important;
+}
+
+.desc-label {
+  font-family: OpenSans;
+  font-size: 13px;
+  color: #000000;
+  line-height: 20px;
+  padding-right: 13px;
+  margin-left: 5px;
+  margin-bottom: 8px;
+}
+
+.label-disable {
+  color: #B0B0CE !important;
+}
+
+.spinner {
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+.workflow-label {
+  font-family: OpenSans;
+  font-size: 14px;
+  font-weight: 600;
+  color: #000000;
+  margin-bottom: 10px;
+  display: block;
+}
+
+.symbol-box {
+  font-size: 20px;
+  font-weight: bold;
+  line-height: 35px;
+  text-align: center;
+}
+
+.field-text {
+  width: 100%;
+  padding: 6px;
+  font-size: 14px;
+  font-family: OpenSans;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.days-label {
+  line-height: 35px;
+  font-family: OpenSans;
+}
+
+.div-disable {
+  pointer-events: none;
+  opacity: 0.5;
+}
