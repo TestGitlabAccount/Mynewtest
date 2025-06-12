@@ -1,0 +1,61 @@
+<!-- Radio Button Toggle -->
+<div class="mb-3">
+  <label>
+    <input type="radio" [(ngModel)]="notificationTypeId" [value]="1" /> 
+    Based on Deloitte Start Date & First Login Date
+  </label>
+  <div *ngIf="notificationTypeId == 1" class="pl-4 pt-2">
+    <label>When should the email be sent to the user: *</label>
+    <div style="display: flex; gap: 8px; align-items: center;">
+      <select [(ngModel)]="triggerDate">
+        <option value="">Select your trigger Date</option>
+        <option value="startDate">Start Date</option>
+        <option value="loginDate">First Login Date</option>
+      </select>
+
+      <select [(ngModel)]="dayOperator">
+        <option value="+">+</option>
+        <option value="-">-</option>
+      </select>
+
+      <input type="number" [(ngModel)]="days" placeholder="days" min="0" />
+      <span>days</span>
+    </div>
+  </div>
+</div>
+
+<!-- Second Option -->
+<div class="mb-3">
+  <label>
+    <input type="radio" [(ngModel)]="notificationTypeId" [value]="2" /> 
+    Based on Start Date and End Date
+  </label>
+  <div *ngIf="notificationTypeId == 2" class="pl-4 pt-2">
+    <label><strong>Choose the start and end dates for sending this email: *</strong></label>
+    <p class="text-muted">Email would be sent once during the selected date range.</p>
+    
+    <div style="display: flex; gap: 16px;">
+      <div>
+        <label>Start Date</label><br />
+        <input type="date" [(ngModel)]="startDate" />
+      </div>
+      <div>
+        <label>End Date</label><br />
+        <input type="date" [(ngModel)]="endDate" />
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
+
+
+
+notificationTypeId = 1; // default
+triggerDate = '';
+dayOperator = '+';
+days = 0;
+startDate = '';
+endDate = '';
