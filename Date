@@ -1,0 +1,48 @@
+import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatNativeDateModule } from '@angular/material/core';
+import { FormsModule, ReactiveFormsModule } from '@angular/forms';
+
+@NgModule({
+  imports: [
+    MatDatepickerModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatNativeDateModule,
+    FormsModule,
+    ReactiveFormsModule
+  ]
+})
+export class AppModule {}
+
+
+<mat-form-field appearance="fill">
+  <mat-label>Start date range</mat-label>
+  <mat-date-range-input [rangePicker]="picker">
+    <input matStartDate placeholder="Start date" [(ngModel)]="startDate">
+    <input matEndDate placeholder="End date" [(ngModel)]="endDate">
+  </mat-date-range-input>
+  <mat-datepicker-toggle matSuffix [for]="picker"></mat-datepicker-toggle>
+  <mat-date-range-picker #picker></mat-date-range-picker>
+</mat-form-field>
+
+<div>
+  <p><strong>Selected Range:</strong></p>
+  <p>From: {{ startDate | date }}</p>
+  <p>To: {{ endDate | date }}</p>
+</div>
+
+
+
+import { Component } from '@angular/core';
+
+@Component({
+  selector: 'app-root',
+  templateUrl: './app.component.html',
+})
+export class AppComponent {
+  startDate: Date | null = new Date('2025-06-15');
+  endDate: Date | null = new Date('2025-07-31');
+}
+
